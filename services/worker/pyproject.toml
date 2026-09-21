@@ -1,0 +1,20 @@
+[project]
+name = "worker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "indra suthar", email = "indrasuthar14@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "redis>=8.1.0",
+    "sqlalchemy>=2.0.54",
+]
+
+[project.scripts]
+worker = "worker:main"
+
+[build-system]
+requires = ["uv_build>=0.11.23,<0.12.0"]
+build-backend = "uv_build"

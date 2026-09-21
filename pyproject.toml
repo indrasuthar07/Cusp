@@ -1,0 +1,21 @@
+[project]
+name = "cusp"
+version = "0.1.0"
+description = "Free-First, Provider-Neutral Governance Gateway"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "packages/cusp-sdk-python",
+    "services/gateway",
+    "services/worker"
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
