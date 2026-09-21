@@ -1,10 +1,21 @@
 [project]
-name = "cusp-workspace"
-version = "0.0.0"
+name = "cusp"
+version = "0.1.0"
+description = "Free-First, Provider-Neutral Governance Gateway"
 requires-python = ">=3.12"
+dependencies = []
 
 [tool.uv.workspace]
-members = ["services/*", "packages/*"]
+members = [
+    "packages/cusp-sdk-python",
+    "services/gateway",
+    "services/worker"
+]
 
-[tool.uv]
-dev-dependencies = ["ruff", "mypy", "pytest", "pytest-asyncio"]
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
