@@ -9,17 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
+    "asyncpg>=0.30.0",
     "fastapi>=0.141.1",
+    "psycopg2-binary>=2.9.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "redis>=8.1.0",
     "sqlalchemy>=2.0.54",
     "uvicorn[standard]>=0.53.0",
 ]
-
-[project.scripts]
-gateway = "gateway:main"
-
-[build-system]
-requires = ["uv_build>=0.11.23,<0.12.0"]
-build-backend = "uv_build"
