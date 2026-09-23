@@ -1,4 +1,4 @@
-"""Alembic environment configuration for Cusp Gateway."""
+"""Alembic env configuration for Cusp Gateway."""
 
 import os
 import sys

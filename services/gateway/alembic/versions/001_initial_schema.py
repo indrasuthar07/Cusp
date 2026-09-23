@@ -1,16 +1,4 @@
-"""Initial Cusp schema — all Phase 2 tables.
-
-Revision ID: 001_initial
-Revises: None
-Create Date: 2026-09-23
-
-Design rules:
-  • UUID public IDs on every entity.
-  • BIGINT internal append-only IDs.
-  • Integer micro-USD for ALL currency (1 USD = 1_000_000). No floats.
-  • UTC timestamps.
-  • Immutable action, usage, decision, and audit records.
-  • No raw prompt, source code, tool argument, or tool result columns.
+"""Initial Cusp schema - all tables
 """
 from typing import Sequence, Union
 
@@ -61,7 +49,7 @@ def upgrade() -> None:
     cost_source.create(op.get_bind(), checkfirst=True)
     energy_quality.create(op.get_bind(), checkfirst=True)
 
-    # ── organizations ───────────────────────────────────────────────────
+    # organizations
     op.create_table(
         "organizations",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -72,7 +60,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    # ── users ───────────────────────────────────────────────────────────
+    # users
     op.create_table(
         "users",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -83,7 +71,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    # ── memberships ─────────────────────────────────────────────────────
+    # memberships
     op.create_table(
         "memberships",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -94,7 +82,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("user_id", "org_id", name="uq_membership_user_org"),
     )
 
-    # ── agent_registrations ─────────────────────────────────────────────
+    # agent_registrations 
     op.create_table(
         "agent_registrations",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -107,7 +95,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("org_id", "name", name="uq_agent_org_name"),
     )
 
-    # ── service_tokens ──────────────────────────────────────────────────
+    # service_tokens 
     op.create_table(
         "service_tokens",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -121,7 +109,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    # ── model_profiles ──────────────────────────────────────────────────
+    # model_profiles 
     op.create_table(
         "model_profiles",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -138,7 +126,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_model_profiles_provider_enabled", "model_profiles", ["provider_kind", "is_enabled"])
 
-    # ── policy_sets ─────────────────────────────────────────────────────
+    # policy_sets 
     op.create_table(
         "policy_sets",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -151,7 +139,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_policy_sets_org_active", "policy_sets", ["org_id", "is_active"])
 
-    # ── policy_versions ─────────────────────────────────────────────────
+    # policy_versions 
     op.create_table(
         "policy_versions",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -163,7 +151,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    # ── sessions ────────────────────────────────────────────────────────
+    # sessions 
     op.create_table(
         "sessions",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -179,7 +167,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_sessions_org_status_started", "sessions", ["org_id", "status", "started_at"])
 
-    # ── action_attempts ─────────────────────────────────────────────────
+    # action_attempts 
     op.create_table(
         "action_attempts",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -192,7 +180,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_action_attempts_session_seq", "action_attempts", ["session_id", "sequence_number"])
 
-    # ── usage_records ───────────────────────────────────────────────────
+    # usage_records 
     op.create_table(
         "usage_records",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -217,7 +205,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
 
-    # ── decisions ───────────────────────────────────────────────────────
+    # decisions 
     op.create_table(
         "decisions",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -233,7 +221,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_decisions_session_created", "decisions", ["session_id", "created_at"])
 
-    # ── audit_events ────────────────────────────────────────────────────
+    # audit_events 
     op.create_table(
         "audit_events",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
@@ -246,7 +234,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_audit_events_correlation", "audit_events", ["correlation_id"])
 
-    # ── daily_spend_aggregates ──────────────────────────────────────────
+    # daily_spend_aggregates 
     op.create_table(
         "daily_spend_aggregates",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),

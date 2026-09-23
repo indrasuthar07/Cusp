@@ -1,1 +1,1 @@
-# Alembic versions directory — migration scripts go here.
+# Alembic versions directory migration scripts go here..

@@ -1,17 +1,8 @@
 """
-Cusp Gateway — SQLAlchemy ORM models.
-
-Design rules (from spec §7):
-  • UUID public IDs on every entity.
-  • BIGINT internal append-only IDs where appropriate.
-  • Integer micro-USD for ALL currency (1 USD = 1_000_000 µ$). No floats.
-  • UTC timestamps via server_default.
-  • Immutable action, usage, decision, and audit records.
-  • No raw prompt, source code, tool argument, or tool result columns.
+Cusp Gateway - SQLAlchemy ORM models.
 """
 
 from __future__ import annotations
-
 import enum
 import uuid
 from datetime import datetime
@@ -33,15 +24,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
-# ── Base ────────────────────────────────────────────────────────────────
-
+# Base 
 class Base(DeclarativeBase):
     """Shared declarative base for all Cusp models."""
     pass
 
 
-# ── Enums ───────────────────────────────────────────────────────────────
-
+# Enums 
 class MembershipRole(str, enum.Enum):
     owner = "owner"
     admin = "admin"
@@ -90,8 +79,7 @@ class EnergyQuality(str, enum.Enum):
     unavailable = "unavailable"
 
 
-# ── Organizations ───────────────────────────────────────────────────────
-
+# Organizations 
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -116,8 +104,7 @@ class Organization(Base):
     model_profiles: Mapped[list[ModelProfile]] = relationship(back_populates="organization")
 
 
-# ── Users ───────────────────────────────────────────────────────────────
-
+# Users 
 class User(Base):
     __tablename__ = "users"
 
@@ -135,8 +122,7 @@ class User(Base):
     memberships: Mapped[list[Membership]] = relationship(back_populates="user")
 
 
-# ── Memberships ─────────────────────────────────────────────────────────
-
+#  Memberships 
 class Membership(Base):
     __tablename__ = "memberships"
     __table_args__ = (
@@ -161,8 +147,7 @@ class Membership(Base):
     organization: Mapped[Organization] = relationship(back_populates="memberships")
 
 
-# ── Agent Registrations ─────────────────────────────────────────────────
-
+# Agent Registrations 
 class AgentRegistration(Base):
     __tablename__ = "agent_registrations"
     __table_args__ = (
@@ -188,8 +173,7 @@ class AgentRegistration(Base):
     sessions: Mapped[list[Session]] = relationship(back_populates="agent")
 
 
-# ── Service Tokens ──────────────────────────────────────────────────────
-
+# Service Tokens 
 class ServiceToken(Base):
     __tablename__ = "service_tokens"
 
@@ -214,8 +198,7 @@ class ServiceToken(Base):
     agent: Mapped[AgentRegistration] = relationship(back_populates="service_tokens")
 
 
-# ── Model Profiles ──────────────────────────────────────────────────────
-
+# Model Profiles 
 class ModelProfile(Base):
     __tablename__ = "model_profiles"
     __table_args__ = (
@@ -247,8 +230,7 @@ class ModelProfile(Base):
     organization: Mapped[Organization] = relationship(back_populates="model_profiles")
 
 
-# ── Policy Sets & Versions ──────────────────────────────────────────────
-
+# Policy Sets & Versions 
 class PolicySet(Base):
     __tablename__ = "policy_sets"
     __table_args__ = (
@@ -293,8 +275,7 @@ class PolicyVersion(Base):
     policy_set: Mapped[PolicySet] = relationship(back_populates="versions")
 
 
-# ── Sessions (Runs) ────────────────────────────────────────────────────
-
+# Sessions (Runs) 
 class Session(Base):
     __tablename__ = "sessions"
     __table_args__ = (
@@ -333,8 +314,7 @@ class Session(Base):
     actions: Mapped[list[ActionAttempt]] = relationship(back_populates="session")
 
 
-# ── Action Attempts (append-only) ──────────────────────────────────────
-
+# Action Attempts (append-only) 
 class ActionAttempt(Base):
     __tablename__ = "action_attempts"
     __table_args__ = (
@@ -360,8 +340,7 @@ class ActionAttempt(Base):
     decisions: Mapped[list[Decision]] = relationship(back_populates="action")
 
 
-# ── Usage Records (append-only) ────────────────────────────────────────
-
+# Usage Records (append-only) 
 class UsageRecord(Base):
     """
     Critical cost tracking — every field from spec §7.
@@ -412,8 +391,7 @@ class UsageRecord(Base):
     action: Mapped[ActionAttempt] = relationship(back_populates="usage_records")
 
 
-# ── Decisions (append-only) ─────────────────────────────────────────────
-
+# Decisions (append-only) 
 class Decision(Base):
     __tablename__ = "decisions"
     __table_args__ = (
@@ -444,8 +422,7 @@ class Decision(Base):
     action: Mapped[ActionAttempt] = relationship(back_populates="decisions")
 
 
-# ── Audit Events (append-only) ─────────────────────────────────────────
-
+# Audit Events (append-only) 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
@@ -469,8 +446,7 @@ class AuditEvent(Base):
     )
 
 
-# ── Daily Spend Aggregates ──────────────────────────────────────────────
-
+# Daily Spend Aggregates 
 class DailySpendAggregate(Base):
     """Pre-computed daily rollup for analytics — not used in hot path."""
     __tablename__ = "daily_spend_aggregates"
