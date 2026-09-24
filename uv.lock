@@ -137,7 +137,7 @@ wheels = [
 [[package]]
 name = "gateway"
 version = "0.1.0"
-source = { editable = "services/gateway" }
+source = { virtual = "services/gateway" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -868,7 +868,7 @@ wheels = [
 [[package]]
 name = "worker"
 version = "0.1.0"
-source = { editable = "services/worker" }
+source = { virtual = "services/worker" }
 dependencies = [
     { name = "redis" },
     { name = "sqlalchemy" },
