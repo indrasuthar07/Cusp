@@ -35,6 +35,7 @@ from app.auth.schemas import (
 from app.auth.service_tokens import create_service_token, revoke_service_token
 from app.db import get_db
 from app.db.models import AgentRegistration, MembershipRole, ServiceToken
+from app.events import AuditLogPayload, get_event_publisher
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -85,6 +86,19 @@ async def create_token(
         scopes=body.scopes,
     )
     await db.commit()
+
+    # Emit audit event to Redis Streams
+    await get_event_publisher().publish_audit_log(
+        org_id=user.org_id,
+        payload=AuditLogPayload(
+            actor_type="user",
+            actor_id=str(user.user_public_id),
+            action="token.created",
+            resource_type="service_token",
+            resource_id=str(token_row.public_id),
+            details={"agent_public_id": str(agent.public_id), "label": token_row.label},
+        ),
+    )
 
     return CreateTokenResponse(
         token_public_id=token_row.public_id,
@@ -169,6 +183,19 @@ async def revoke_token(
 
     revoked = await revoke_service_token(db, token_public_id)
     await db.commit()
+
+    # Emit audit event to Redis Streams
+    await get_event_publisher().publish_audit_log(
+        org_id=user.org_id,
+        payload=AuditLogPayload(
+            actor_type="user",
+            actor_id=str(user.user_public_id),
+            action="token.revoked",
+            resource_type="service_token",
+            resource_id=str(token_public_id),
+            details={"revoked": revoked},
+        ),
+    )
 
     return RevokeTokenResponse(
         token_public_id=token_public_id,
