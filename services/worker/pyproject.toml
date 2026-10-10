@@ -8,6 +8,9 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "asyncpg>=0.30.0",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
     "redis>=8.1.0",
     "sqlalchemy>=2.0.54",
 ]
