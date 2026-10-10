@@ -1,5 +1,5 @@
 """
-Cusp Gateway - SQLAlchemy ORM models.
+Cusp Gateway - SQLAlchemy ORM models
 """
 
 from __future__ import annotations
@@ -340,7 +340,7 @@ class ActionAttempt(Base):
     decisions: Mapped[list[Decision]] = relationship(back_populates="action")
 
 
-# Usage Records (append-only) 
+# Usage Records
 class UsageRecord(Base):
     """
     Critical cost tracking — every field from spec §7.
