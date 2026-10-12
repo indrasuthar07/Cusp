@@ -5,7 +5,7 @@ Loads and caches Lua scripts via EVALSHA for atomic execution.
 import os
 import time
 from typing import Any
-from services.gateway.app.db.redis import get_redis_client
+from app.db.redis import get_redis_client
 
 LUA_DIR = os.path.join(os.path.dirname(__file__), "lua")
 
