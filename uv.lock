@@ -870,12 +870,18 @@ name = "worker"
 version = "0.1.0"
 source = { virtual = "services/worker" }
 dependencies = [
+    { name = "asyncpg" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "redis" },
     { name = "sqlalchemy" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=8.1.0" },
     { name = "sqlalchemy", specifier = ">=2.0.54" },
 ]
