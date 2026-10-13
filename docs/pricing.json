@@ -41,6 +41,22 @@
       "output_micro_usd_per_1k_tokens": null,
       "cost_source": "provider_reported",
       "requires_provider_catalog": true
+    },
+    "openai": {
+      "provider": "openai",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
     }
   }
 }
