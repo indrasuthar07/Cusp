@@ -12,13 +12,17 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("audit_events", sa.Column("event_id", sa.String(length=255), nullable=True))
+    op.add_column(
+        "audit_events", sa.Column("event_id", sa.String(length=255), nullable=True)
+    )
     op.execute(
         "UPDATE audit_events SET event_id = md5(id::text || ':' || clock_timestamp()::text) "
         "WHERE event_id IS NULL"
     )
     op.alter_column("audit_events", "event_id", nullable=False)
-    op.create_unique_constraint("uq_audit_events_event_id", "audit_events", ["event_id"])
+    op.create_unique_constraint(
+        "uq_audit_events_event_id", "audit_events", ["event_id"]
+    )
 
 
 def downgrade() -> None:

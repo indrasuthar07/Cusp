@@ -15,7 +15,7 @@ from __future__ import annotations
 import enum
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -45,7 +45,10 @@ def redact_payload(value: Any, *, key: str = "") -> Any:
     if _SENSITIVE_KEY.search(key):
         return REDACTED_VALUE
     if isinstance(value, dict):
-        return {str(child_key): redact_payload(child, key=str(child_key)) for child_key, child in value.items()}
+        return {
+            str(child_key): redact_payload(child, key=str(child_key))
+            for child_key, child in value.items()
+        }
     if isinstance(value, list):
         return [redact_payload(child, key=key) for child in value]
     if isinstance(value, str):
@@ -55,6 +58,7 @@ def redact_payload(value: Any, *, key: str = "") -> Any:
 
 class CuspEventType(str, enum.Enum):
     """Categorized event types supported on the event bus."""
+
     # Session / Run lifecycle
     RUN_CREATED = "RUN_CREATED"
     RUN_PAUSED = "RUN_PAUSED"
@@ -76,13 +80,14 @@ class CuspEventType(str, enum.Enum):
 
 class CuspEvent(BaseModel):
     """Universal envelope for all events traversing Redis Streams."""
+
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     event_type: CuspEventType | str
     org_id: int
     session_id: int | None = None
     agent_id: int | None = None
     correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any] = Field(default_factory=dict)
 
     def to_stream_entry(self) -> dict[str, str]:
@@ -100,7 +105,9 @@ class CuspEvent(BaseModel):
 
         return {
             "event_id": self.event_id,
-            "event_type": self.event_type.value if isinstance(self.event_type, enum.Enum) else str(self.event_type),
+            "event_type": self.event_type.value
+            if isinstance(self.event_type, enum.Enum)
+            else str(self.event_type),
             "org_id": str(self.org_id),
             "session_id": str(self.session_id) if self.session_id is not None else "",
             "agent_id": str(self.agent_id) if self.agent_id is not None else "",
@@ -124,7 +131,7 @@ class CuspEvent(BaseModel):
         payload_raw = decoded.get("payload", "{}")
         try:
             payload = json.loads(payload_raw) if payload_raw else {}
-        except Exception:
+        except (TypeError, ValueError, json.JSONDecodeError):
             payload = {"raw": payload_raw}
 
         session_id_raw = decoded.get("session_id", "").strip()
@@ -135,9 +142,9 @@ class CuspEvent(BaseModel):
             try:
                 timestamp = datetime.fromisoformat(ts_raw)
             except ValueError:
-                timestamp = datetime.now(timezone.utc)
+                timestamp = datetime.now(UTC)
         else:
-            timestamp = datetime.now(timezone.utc)
+            timestamp = datetime.now(UTC)
 
         return cls(
             event_id=decoded.get("event_id", str(uuid.uuid4())),
@@ -153,8 +160,10 @@ class CuspEvent(BaseModel):
 
 # Typed Payload Models
 
+
 class SessionEventPayload(BaseModel):
     """Payload for RUN_CREATED / RUN_PAUSED / RUN_TERMINATED events."""
+
     session_public_id: str
     status: str
     budget_cap_micro_usd: int = 0
@@ -164,6 +173,7 @@ class SessionEventPayload(BaseModel):
 
 class ActionPreflightPayload(BaseModel):
     """Payload for ACTION_PREFLIGHTED / ACTION_EXECUTED events."""
+
     action_public_id: str
     action_type: str
     verdict: str
@@ -174,6 +184,7 @@ class ActionPreflightPayload(BaseModel):
 
 class TelemetryPayload(BaseModel):
     """Payload for TELEMETRY_RECORDED events."""
+
     tokens_input: int = 0
     tokens_output: int = 0
     tokens_total: int = 0
@@ -187,6 +198,7 @@ class TelemetryPayload(BaseModel):
 
 class AuditLogPayload(BaseModel):
     """Payload for AUDIT_LOG events."""
+
     actor_type: str = "system"  # agent | user | system
     actor_id: str = ""
     action: str

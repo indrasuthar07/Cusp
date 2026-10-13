@@ -13,7 +13,7 @@ a running PostgreSQL database. They test:
 import hashlib
 import hmac
 
-from app.auth.service_tokens import TOKEN_PREFIX, RAW_TOKEN_BYTES, _hash_token
+from app.auth.service_tokens import RAW_TOKEN_BYTES, TOKEN_PREFIX, _hash_token
 
 
 def test_hash_is_deterministic():

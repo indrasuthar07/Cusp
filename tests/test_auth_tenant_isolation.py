@@ -39,14 +39,21 @@ async def test_create_token_filters_requested_agent_by_callers_org() -> None:
     result = MagicMock()
     result.scalar_one_or_none.return_value = agent
     db.execute.return_value = result
-    token = MagicMock(public_id=uuid.uuid4(), label="ci", scopes={}, created_at=datetime.now(UTC))
+    token = MagicMock(
+        public_id=uuid.uuid4(), label="ci", scopes={}, created_at=datetime.now(UTC)
+    )
 
-    with patch("app.api.auth_routes.create_service_token", new_callable=AsyncMock) as create, patch(
-        "app.api.auth_routes.get_event_publisher"
-    ) as publisher:
+    with (
+        patch(
+            "app.api.auth_routes.create_service_token", new_callable=AsyncMock
+        ) as create,
+        patch("app.api.auth_routes.get_event_publisher") as publisher,
+    ):
         create.return_value = (token, "cusp_raw")
         publisher.return_value.publish_audit_log = AsyncMock()
-        await create_token(CreateTokenRequest(agent_public_id=agent.public_id), _user(77), db)
+        await create_token(
+            CreateTokenRequest(agent_public_id=agent.public_id), _user(77), db
+        )
 
     query = _sql(db.execute.call_args.args[0])
     assert "agent_registrations.org_id" in query
@@ -77,9 +84,12 @@ async def test_revoke_token_passes_callers_org_to_service_layer() -> None:
     db.execute.return_value = result
     token_id = uuid.uuid4()
 
-    with patch("app.api.auth_routes.revoke_service_token", new_callable=AsyncMock) as revoke, patch(
-        "app.api.auth_routes.get_event_publisher"
-    ) as publisher:
+    with (
+        patch(
+            "app.api.auth_routes.revoke_service_token", new_callable=AsyncMock
+        ) as revoke,
+        patch("app.api.auth_routes.get_event_publisher") as publisher,
+    ):
         revoke.return_value = True
         publisher.return_value.publish_audit_log = AsyncMock()
         await revoke_token(token_id, _user(99), db)
@@ -105,9 +115,12 @@ async def test_oidc_organization_claim_is_the_only_tenant_selector() -> None:
     result.scalars.return_value.all.return_value = []
     db.execute.return_value = result
 
-    with patch("app.auth.dependencies.get_settings") as settings, patch(
-        "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
-    ) as verify:
+    with (
+        patch("app.auth.dependencies.get_settings") as settings,
+        patch(
+            "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
+        ) as verify,
+    ):
         settings.return_value.oidc_issuer_url = "https://issuer.example"
         settings.return_value.oidc_jwks_url = "https://issuer.example/jwks"
         settings.return_value.oidc_audience = "cusp-dashboard"

@@ -18,6 +18,7 @@ class WorkerEnvironment(StrEnum):
     test = "test"
     production = "production"
 
+
 class WorkerSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -64,13 +65,23 @@ class WorkerSettings(BaseSettings):
             raise ValueError("CLAIM_IDLE_MS cannot be negative")
         if not self.retry_hash.strip():
             raise ValueError("RETRY_HASH cannot be empty")
-        if self.log_level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
-            raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+        if self.log_level.upper() not in {
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        }:
+            raise ValueError(
+                "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
         if self.cusp_env is WorkerEnvironment.production and (
             "database_url" not in self.model_fields_set
             or "redis_url" not in self.model_fields_set
         ):
-            raise ValueError("production worker requires explicit DATABASE_URL and REDIS_URL")
+            raise ValueError(
+                "production worker requires explicit DATABASE_URL and REDIS_URL"
+            )
         return self
 
 

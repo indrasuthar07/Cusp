@@ -10,7 +10,7 @@ from sqlalchemy import engine_from_config, pool
 # Make gateway app importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.db.models import Base  # noqa: E402
+from app.db.models import Base
 
 config = context.config
 

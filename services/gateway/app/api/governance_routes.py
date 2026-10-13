@@ -54,12 +54,16 @@ class ProgressRequest(BaseModel):
 
 class PreflightRequest(BaseModel):
     run_id: uuid.UUID
-    action_type: Literal["model_call", "tool_call", "test_run", "file_change", "context_read"]
+    action_type: Literal[
+        "model_call", "tool_call", "test_run", "file_change", "context_read"
+    ]
     provider_profile: str = Field(min_length=1, max_length=128)
     estimated_cost_micro_usd: int = Field(ge=0)
     idempotency_key: str = Field(min_length=16, max_length=255)
     sequence: int = Field(ge=1)
-    data_classification: Literal["public", "internal", "confidential", "restricted"] = "internal"
+    data_classification: Literal["public", "internal", "confidential", "restricted"] = (
+        "internal"
+    )
     summary: str = Field(default="", max_length=2000)
     progress: ProgressRequest = Field(default_factory=ProgressRequest)
     provider_error_code: str | None = None
@@ -103,7 +107,9 @@ class ControlResponse(BaseModel):
 
 def _decision_response(decision: Decision, action: ActionAttempt) -> DecisionResponse:
     if not decision.decision_token or decision.expires_at is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Decision is not replayable")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Decision is not replayable"
+        )
     return DecisionResponse(
         decision_id=decision.public_id,
         action_id=action.public_id,
@@ -122,7 +128,9 @@ def _signer() -> DecisionTokenSigner:
     return DecisionTokenSigner(get_settings().cusp_session_secret.get_secret_value())
 
 
-async def _load_run(db: AsyncSession, agent: AgentIdentity, run_id: uuid.UUID) -> Session:
+async def _load_run(
+    db: AsyncSession, agent: AgentIdentity, run_id: uuid.UUID
+) -> Session:
     result = await db.execute(
         select(Session).where(
             Session.public_id == run_id,
@@ -132,7 +140,9 @@ async def _load_run(db: AsyncSession, agent: AgentIdentity, run_id: uuid.UUID) -
     )
     run = result.scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Run not found"
+        )
     return run
 
 
@@ -166,8 +176,14 @@ async def create_run(
     db.add(run)
     await db.flush()
     await db.commit()
-    await budget_engine.initialize_run(str(run.public_id), str(agent.org_id), body.budget_cap_micro_usd)
-    return RunResponse(run_id=run.public_id, status=run.status.value, budget_cap_micro_usd=run.budget_cap_micro_usd)
+    await budget_engine.initialize_run(
+        str(run.public_id), str(agent.org_id), body.budget_cap_micro_usd
+    )
+    return RunResponse(
+        run_id=run.public_id,
+        status=run.status.value,
+        budget_cap_micro_usd=run.budget_cap_micro_usd,
+    )
 
 
 @router.post("/actions/preflight", response_model=DecisionResponse)
@@ -178,14 +194,20 @@ async def preflight(
 ) -> DecisionResponse:
     run = await _load_run(db, agent, body.run_id)
     if run.status is not SessionStatus.running:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"run_{run.status.value}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"run_{run.status.value}"
+        )
     policy = await _load_policy(db, agent.org_id)
     key_result = await db.execute(
-        select(ActionAttempt).where(ActionAttempt.idempotency_key == body.idempotency_key)
+        select(ActionAttempt).where(
+            ActionAttempt.idempotency_key == body.idempotency_key
+        )
     )
     key_owner = key_result.scalar_one_or_none()
     if key_owner is not None and key_owner.session_id != run.id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="idempotency_key_conflict")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="idempotency_key_conflict"
+        )
     existing_result = await db.execute(
         select(ActionAttempt, Decision)
         .join(Decision, Decision.action_id == ActionAttempt.id)
@@ -206,9 +228,20 @@ async def preflight(
         .order_by(ActionAttempt.sequence_number.desc())
         .limit(20)
     )
-    recent_progress = tuple(ProgressSignal(**item) for item in prior_result.scalars().all() if item)
-    rules = policy.rules if policy is not None else {"default_action": "pause", "fail_safe": {"on_policy_resolution_failure": "pause"}}
-    resolver = PolicyResolver(rules, policy_version=policy.version_number if policy else 1, signer=_signer())
+    recent_progress = tuple(
+        ProgressSignal(**item) for item in prior_result.scalars().all() if item
+    )
+    rules = (
+        policy.rules
+        if policy is not None
+        else {
+            "default_action": "pause",
+            "fail_safe": {"on_policy_resolution_failure": "pause"},
+        }
+    )
+    resolver = PolicyResolver(
+        rules, policy_version=policy.version_number if policy else 1, signer=_signer()
+    )
     context = GovernanceContext(
         action_id=str(uuid.uuid4()),
         provider_profile=body.provider_profile,
@@ -261,13 +294,23 @@ async def preflight(
                 str(agent.org_id),
                 body.idempotency_key,
                 body.estimated_cost_micro_usd,
-                int(rules.get("budgets", {}).get("run_cap_micro_usd", run.budget_cap_micro_usd)),
-                int(rules.get("budgets", {}).get("organization_cap_micro_usd", 2**63 - 1)),
+                int(
+                    rules.get("budgets", {}).get(
+                        "run_cap_micro_usd", run.budget_cap_micro_usd
+                    )
+                ),
+                int(
+                    rules.get("budgets", {}).get(
+                        "organization_cap_micro_usd", 2**63 - 1
+                    )
+                ),
                 action_id=str(action.public_id),
             )
-        except Exception:
+        except (ConnectionError, TimeoutError, OSError, RuntimeError):
             decision = resolver._decision(context, "pause", "budget_check_failed", None)
-            stored_decision = await db.execute(select(Decision).where(Decision.action_id == action.id))
+            stored_decision = await db.execute(
+                select(Decision).where(Decision.action_id == action.id)
+            )
             decision_row = stored_decision.scalar_one()
             decision_row.verdict = DecisionVerdict.pause
             decision_row.reason = decision.reason_code
@@ -275,11 +318,15 @@ async def preflight(
             decision_row.approved_profile = decision.approved_profile
             decision_row.policy_version = decision.policy_version
             decision_row.loop_score = decision.loop_score
-            decision_row.expires_at = datetime.fromtimestamp(decision.expires_at, tz=UTC)
+            decision_row.expires_at = datetime.fromtimestamp(
+                decision.expires_at, tz=UTC
+            )
             decision_row.decision_token = decision.decision_token
             run.status = SessionStatus.paused
     await db.commit()
-    stored_decision = await db.execute(select(Decision).where(Decision.action_id == action.id))
+    stored_decision = await db.execute(
+        select(Decision).where(Decision.action_id == action.id)
+    )
     return _decision_response(stored_decision.scalar_one(), action)
 
 
@@ -293,7 +340,9 @@ async def report_completion(
     try:
         signer.verify(body.decision_token, action_id=str(body.action_id))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid decision token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid decision token"
+        ) from exc
     result = await db.execute(
         select(ActionAttempt, Session, Decision)
         .join(Session, ActionAttempt.session_id == Session.id)
@@ -306,14 +355,26 @@ async def report_completion(
     )
     row = result.first()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Action not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Action not found"
+        )
     action, run, decision = row
     if decision.verdict not in {DecisionVerdict.allow, DecisionVerdict.downgrade}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Action was not authorized")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Action was not authorized"
+        )
     release_result = await budget_engine.release(
-        str(run.public_id), str(agent.org_id), body.estimated_cost_micro_usd, body.actual_cost_micro_usd, action_id=str(action.public_id)
+        str(run.public_id),
+        str(agent.org_id),
+        body.estimated_cost_micro_usd,
+        body.actual_cost_micro_usd,
+        action_id=str(action.public_id),
     )
-    if isinstance(release_result, (list, tuple)) and len(release_result) > 1 and str(release_result[1]) == "overrun":
+    if (
+        isinstance(release_result, (list, tuple))
+        and len(release_result) > 1
+        and str(release_result[1]) == "overrun"
+    ):
         run.status = SessionStatus.failed
     await db.commit()
 
@@ -341,7 +402,9 @@ async def set_control(
         run.status = SessionStatus.paused
     elif body.action == "resume":
         if run.status is not SessionStatus.paused:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_not_paused")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="run_is_not_paused"
+            )
         run.status = SessionStatus.running
     elif body.action == "terminate":
         run.status = SessionStatus.terminated

@@ -29,7 +29,9 @@ class GatewayTransportError(RuntimeError):
 class HttpGatewayTransport:
     """Async transport for the versioned Cusp gateway REST lifecycle."""
 
-    def __init__(self, base_url: str, service_token: str, timeout_seconds: float = 15.0) -> None:
+    def __init__(
+        self, base_url: str, service_token: str, timeout_seconds: float = 15.0
+    ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError("gateway base_url must use http:// or https://")
         if not service_token.strip():
@@ -42,7 +44,9 @@ class HttpGatewayTransport:
         self._actions: dict[str, ActionRequest] = {}
         self._decisions: dict[str, Decision] = {}
 
-    async def create_run(self, budget_cap_micro_usd: int, metadata: dict[str, str]) -> Run:
+    async def create_run(
+        self, budget_cap_micro_usd: int, metadata: dict[str, str]
+    ) -> Run:
         payload = await self._call(
             "POST",
             "/api/v1/runs",
@@ -56,7 +60,9 @@ class HttpGatewayTransport:
         )
 
     async def preflight(self, action: ActionRequest) -> Decision:
-        payload = await self._call("POST", "/api/v1/actions/preflight", _action_payload(action))
+        payload = await self._call(
+            "POST", "/api/v1/actions/preflight", _action_payload(action)
+        )
         decision = Decision(
             action_id=str(payload.get("action_id", action.action_id)),
             verdict=DecisionVerdict(payload["verdict"]),
@@ -73,20 +79,35 @@ class HttpGatewayTransport:
         action = self._actions.get(report.action_id)
         decision = self._decisions.get(report.action_id)
         if action is None or decision is None or not decision.decision_token:
-            raise GatewayTransportError("completion references an unknown or unsigned action")
-        await self._call("POST", "/api/v1/actions/completion", _completion_payload(report, action, decision))
+            raise GatewayTransportError(
+                "completion references an unknown or unsigned action"
+            )
+        await self._call(
+            "POST",
+            "/api/v1/actions/completion",
+            _completion_payload(report, action, decision),
+        )
 
     async def poll_control(self, run_id: str) -> ControlCommand:
         payload = await self._call("GET", f"/api/v1/runs/{run_id}/control")
-        return ControlCommand(ControlAction(payload.get("action", ControlAction.CONTINUE)), str(payload.get("reason", "")))
+        return ControlCommand(
+            ControlAction(payload.get("action", ControlAction.CONTINUE)),
+            str(payload.get("reason", "")),
+        )
 
     async def finish_run(self, run_id: str, state: RunState) -> None:
-        await self._call("POST", f"/api/v1/runs/{run_id}/finish", {"state": state.value})
+        await self._call(
+            "POST", f"/api/v1/runs/{run_id}/finish", {"state": state.value}
+        )
 
-    async def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _call(
+        self, method: str, path: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         return await asyncio.to_thread(self._request, method, path, body)
 
-    def _request(self, method: str, path: str, body: dict[str, Any] | None) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, body: dict[str, Any] | None
+    ) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8") if body is not None else None
         request = Request(
             urljoin(self.base_url, path.lstrip("/")),
@@ -102,8 +123,16 @@ class HttpGatewayTransport:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
-            raise GatewayTransportError(f"gateway request failed with HTTP {exc.code}") from exc
-        except (URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise GatewayTransportError(
+                f"gateway request failed with HTTP {exc.code}"
+            ) from exc
+        except (
+            URLError,
+            TimeoutError,
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+        ) as exc:
             raise GatewayTransportError("gateway request failed") from exc
         if not isinstance(decoded, dict):
             raise GatewayTransportError("gateway returned an invalid response")
@@ -125,7 +154,9 @@ def _action_payload(action: ActionRequest) -> dict[str, Any]:
     }
 
 
-def _completion_payload(report: CompletionReport, action: ActionRequest, decision: Decision) -> dict[str, Any]:
+def _completion_payload(
+    report: CompletionReport, action: ActionRequest, decision: Decision
+) -> dict[str, Any]:
     usage = report.usage
     return {
         "schema_version": 1,

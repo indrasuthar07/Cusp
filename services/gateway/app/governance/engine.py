@@ -26,7 +26,10 @@ class ProgressSignal:
     elapsed_ms: int = 0
 
     def __post_init__(self) -> None:
-        if min(self.diff_bytes, self.tests_passed, self.tests_failed, self.elapsed_ms) < 0:
+        if (
+            min(self.diff_bytes, self.tests_passed, self.tests_failed, self.elapsed_ms)
+            < 0
+        ):
             raise ValueError("progress values cannot be negative")
 
     @property
@@ -86,11 +89,15 @@ class DecisionTokenSigner:
             "policy_version": decision.policy_version,
             "exp": decision.expires_at,
         }
-        encoded = _b64url(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
+        encoded = _b64url(
+            json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+        )
         signature = hmac.new(self._secret, encoded.encode(), hashlib.sha256).digest()
         return f"{encoded}.{_b64url(signature)}"
 
-    def verify(self, token: str, *, action_id: str | None = None, now: int | None = None) -> dict[str, Any]:
+    def verify(
+        self, token: str, *, action_id: str | None = None, now: int | None = None
+    ) -> dict[str, Any]:
         try:
             encoded, signature = token.split(".", 1)
             expected = hmac.new(self._secret, encoded.encode(), hashlib.sha256).digest()
@@ -114,7 +121,14 @@ class DecisionTokenSigner:
 class PolicyResolver:
     """Resolve one decision using stable rule ordering and no model calls."""
 
-    def __init__(self, rules: dict[str, Any], *, policy_version: int, signer: DecisionTokenSigner, ttl_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        rules: dict[str, Any],
+        *,
+        policy_version: int,
+        signer: DecisionTokenSigner,
+        ttl_seconds: int = 300,
+    ) -> None:
         self.rules = rules
         self.policy_version = policy_version
         self.signer = signer
@@ -130,35 +144,101 @@ class PolicyResolver:
             return self._decision(context, "pause", "invalid_cost", None)
         run_cap = budgets.get("run_cap_micro_usd")
         org_cap = budgets.get("organization_cap_micro_usd")
-        if isinstance(run_cap, int) and context.run_spent_micro_usd + context.run_reserved_micro_usd + context.estimated_cost_micro_usd > run_cap:
-            return self._decision(context, fail_safe.get("on_budget_check_failure", "pause"), "run_budget_cap_exceeded", None)
-        if isinstance(org_cap, int) and context.org_spent_micro_usd + context.org_reserved_micro_usd + context.estimated_cost_micro_usd > org_cap:
-            return self._decision(context, fail_safe.get("on_budget_check_failure", "pause"), "organization_budget_cap_exceeded", None)
+        if (
+            isinstance(run_cap, int)
+            and context.run_spent_micro_usd
+            + context.run_reserved_micro_usd
+            + context.estimated_cost_micro_usd
+            > run_cap
+        ):
+            return self._decision(
+                context,
+                fail_safe.get("on_budget_check_failure", "pause"),
+                "run_budget_cap_exceeded",
+                None,
+            )
+        if (
+            isinstance(org_cap, int)
+            and context.org_spent_micro_usd
+            + context.org_reserved_micro_usd
+            + context.estimated_cost_micro_usd
+            > org_cap
+        ):
+            return self._decision(
+                context,
+                fail_safe.get("on_budget_check_failure", "pause"),
+                "organization_budget_cap_exceeded",
+                None,
+            )
 
         hosted = self.rules.get("hosted_egress", {})
         if hosted.get("enabled") and not context.hosted_egress_allowed:
-            return self._decision(context, "pause", "hosted_egress_consent_required", None)
-        if context.data_classification not in set(hosted.get("allowed_data_classes", ["public", "internal", "confidential", "restricted"])):
-            return self._decision(context, "pause", "data_classification_not_allowed", None)
+            return self._decision(
+                context, "pause", "hosted_egress_consent_required", None
+            )
+        if context.data_classification not in set(
+            hosted.get(
+                "allowed_data_classes",
+                ["public", "internal", "confidential", "restricted"],
+            )
+        ):
+            return self._decision(
+                context, "pause", "data_classification_not_allowed", None
+            )
 
-        if context.provider_error_code in {"provider_quota_exhausted", "quota_exhausted", "rate_limited"}:
+        if context.provider_error_code in {
+            "provider_quota_exhausted",
+            "quota_exhausted",
+            "rate_limited",
+        }:
             verdict = fail_safe.get("on_provider_quota_failure", "pause")
-            profile = self.rules.get("quota_downgrade_profile") if verdict == "downgrade" else None
+            profile = (
+                self.rules.get("quota_downgrade_profile")
+                if verdict == "downgrade"
+                else None
+            )
             return self._decision(context, verdict, "provider_quota_exhausted", profile)
         if context.provider_error_code:
-            return self._decision(context, fail_safe.get("on_provider_quota_failure", "pause"), "provider_error", None)
+            return self._decision(
+                context,
+                fail_safe.get("on_provider_quota_failure", "pause"),
+                "provider_error",
+                None,
+            )
 
         loop = self.rules.get("loop_detection", {})
         repeat_limit = int(loop.get("exact_repeat_limit", 3))
-        repeats = sum(1 for item in context.recent_progress if item.fingerprint and item.fingerprint == context.progress.fingerprint)
-        if context.progress.fingerprint and repeats + 1 >= repeat_limit and not context.progress.made_progress:
+        repeats = sum(
+            1
+            for item in context.recent_progress
+            if item.fingerprint and item.fingerprint == context.progress.fingerprint
+        )
+        if (
+            context.progress.fingerprint
+            and repeats + 1 >= repeat_limit
+            and not context.progress.made_progress
+        ):
             score = min(1.0, (repeats + 1) / max(1, repeat_limit))
-            return self._decision(context, "pause", "exact_repeat_no_progress", None, score)
+            return self._decision(
+                context, "pause", "exact_repeat_no_progress", None, score
+            )
 
         profile = self.rules.get("downgrade_profile") if action == "downgrade" else None
-        return self._decision(context, action, "policy_allow" if action == "allow" else f"policy_{action}", profile)
+        return self._decision(
+            context,
+            action,
+            "policy_allow" if action == "allow" else f"policy_{action}",
+            profile,
+        )
 
-    def _decision(self, context: GovernanceContext, verdict: str, reason: str, profile: str | None, loop_score: float | None = None) -> GovernanceDecision:
+    def _decision(
+        self,
+        context: GovernanceContext,
+        verdict: str,
+        reason: str,
+        profile: str | None,
+        loop_score: float | None = None,
+    ) -> GovernanceDecision:
         if verdict not in VERDICTS:
             verdict = "pause"
             reason = "policy_resolution_failed"

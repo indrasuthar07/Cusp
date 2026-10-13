@@ -45,6 +45,7 @@ class ProviderRequest:
         if not self.model.strip():
             raise ValueError("provider model must not be empty")
 
+
 @dataclass(frozen=True, slots=True)
 class Usage:
     """Normalized provider usage and cost metadata."""
@@ -59,12 +60,16 @@ class Usage:
     def __post_init__(self) -> None:
         if self.input_tokens < 0 or self.output_tokens < 0:
             raise ValueError("token counts cannot be negative")
-        if self.provider_cost_micro_usd is not None and self.provider_cost_micro_usd < 0:
+        if (
+            self.provider_cost_micro_usd is not None
+            and self.provider_cost_micro_usd < 0
+        ):
             raise ValueError("provider cost cannot be negative")
         if self.virtual_cost_micro_usd < 0:
             raise ValueError("virtual cost cannot be negative")
         if self.latency_ms is not None and self.latency_ms < 0:
             raise ValueError("latency cannot be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderResponse:

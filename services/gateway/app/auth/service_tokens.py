@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-# Token prefix for easy identification 
+# Token prefix for easy identification
 TOKEN_PREFIX = "cusp_"
 RAW_TOKEN_BYTES = 32  # 256-bit entropy
 
@@ -76,7 +76,7 @@ async def create_service_token(
         expires_at=expires_at,
     )
     db.add(token_row)
-    await db.flush()     
+    await db.flush()
     await db.refresh(token_row)
 
     return token_row, raw_token
@@ -103,8 +103,9 @@ async def validate_service_token(
     stmt = (
         select(ServiceToken)
         .options(
-            selectinload(ServiceToken.agent)
-            .selectinload(AgentRegistration.organization)
+            selectinload(ServiceToken.agent).selectinload(
+                AgentRegistration.organization
+            )
         )
         .where(ServiceToken.token_hash == token_hash)
     )

@@ -2,8 +2,11 @@
 Python wrapper for Redis Lua budget scripts.
 Loads and caches Lua scripts via EVALSHA for atomic execution.
 """
+
+import asyncio
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from app.db.redis import get_redis_client
@@ -23,18 +26,32 @@ class BudgetStateEngine:
         if self._reserve_sha and self._release_sha and self._rate_limit_sha:
             return
 
-        with open(os.path.join(LUA_DIR, "reserve_budget.lua"), "r") as f:
-            self._reserve_sha = await self.redis.script_load(f.read())
-        with open(os.path.join(LUA_DIR, "release_budget.lua"), "r") as f:
-            self._release_sha = await self.redis.script_load(f.read())
-        with open(os.path.join(LUA_DIR, "check_rate_limit.lua"), "r") as f:
-            self._rate_limit_sha = await self.redis.script_load(f.read())
+        async def read_script(name: str) -> str:
+            return await asyncio.to_thread(
+                (Path(LUA_DIR) / name).read_text, encoding="utf-8"
+            )
+
+        self._reserve_sha = await self.redis.script_load(
+            await read_script("reserve_budget.lua")
+        )
+        self._release_sha = await self.redis.script_load(
+            await read_script("release_budget.lua")
+        )
+        self._rate_limit_sha = await self.redis.script_load(
+            await read_script("check_rate_limit.lua")
+        )
 
     async def initialize_run(self, run_id: str, org_id: str, budget_cap: int) -> None:
         """Initialize durable run budget and cooperative-control state."""
         await self.redis.hset(
             f"cusp:v1:run:{run_id}:state",
-            mapping={"status": "running", "spent": 0, "reserved": 0, "cap": budget_cap, "org_id": org_id},
+            mapping={
+                "status": "running",
+                "spent": 0,
+                "reserved": 0,
+                "cap": budget_cap,
+                "org_id": org_id,
+            },
         )
         await self.redis.hset(
             f"cusp:v1:run:{run_id}:control",
@@ -140,5 +157,6 @@ class BudgetStateEngine:
 
         result = await self.redis.evalsha(self._rate_limit_sha, len(keys), *keys, *args)
         return result  # type: ignore
+
 
 budget_engine = BudgetStateEngine()

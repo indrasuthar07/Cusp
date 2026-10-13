@@ -149,8 +149,17 @@ def test_invalid_hosted_profile_is_rejected() -> None:
         "privacy_class": "hosted_consent_required",
         "route_group": "hosted-general",
         "requires_hosted_egress_ack": False,
-        "capabilities": {"streaming": True, "tools": True, "structured_output": True, "usage_reporting": True},
-        "cost_policy": {"cost_source": "provider_reported", "input_micro_usd_per_1k_tokens": None, "output_micro_usd_per_1k_tokens": None},
+        "capabilities": {
+            "streaming": True,
+            "tools": True,
+            "structured_output": True,
+            "usage_reporting": True,
+        },
+        "cost_policy": {
+            "cost_source": "provider_reported",
+            "input_micro_usd_per_1k_tokens": None,
+            "output_micro_usd_per_1k_tokens": None,
+        },
     }
     with pytest.raises(ValidationError):
         Draft202012Validator(schema, format_checker=FORMAT_CHECKER).validate(invalid)

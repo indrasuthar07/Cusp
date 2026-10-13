@@ -1,6 +1,7 @@
 """Async Redis connection pool."""
-from redis.asyncio import Redis
+
 from app.config.settings import get_settings
+from redis.asyncio import Redis
 
 
 def get_redis_client() -> Redis:

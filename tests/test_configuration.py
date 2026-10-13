@@ -14,7 +14,9 @@ from services.worker.app.config import WorkerSettings
 
 def catalog_path(tmp_path: Path) -> Path:
     path = tmp_path / "pricing.json"
-    path.write_text(json.dumps({"version": 1, "profiles": {"fake": {}}}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"version": 1, "profiles": {"fake": {}}}), encoding="utf-8"
+    )
     return path
 
 
@@ -69,7 +71,11 @@ def test_production_requires_strong_secrets_and_allowlist(tmp_path: Path) -> Non
 
 def test_invalid_pricing_catalog_and_energy_mode_fail_clearly(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="CUSP_PRICING_CATALOG_PATH"):
-        Settings(**base_settings(tmp_path, cusp_pricing_catalog_path=tmp_path / "missing.json"))
+        Settings(
+            **base_settings(
+                tmp_path, cusp_pricing_catalog_path=tmp_path / "missing.json"
+            )
+        )
 
     with pytest.raises(ValidationError, match="estimated"):
         Settings(**base_settings(tmp_path, cusp_energy_telemetry_mode="invalid"))

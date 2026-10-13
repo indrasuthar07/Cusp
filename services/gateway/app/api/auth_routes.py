@@ -11,11 +11,6 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.auth.dependencies import (
     AgentIdentity,
     UserIdentity,
@@ -36,11 +31,15 @@ from app.auth.service_tokens import create_service_token, revoke_service_token
 from app.db import get_db
 from app.db.models import AgentRegistration, MembershipRole, ServiceToken
 from app.events import AuditLogPayload, get_event_publisher
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-# Create token (admin/owner only) 
+# Create token (admin/owner only)
 @router.post(
     "/tokens",
     response_model=CreateTokenResponse,
@@ -109,7 +108,7 @@ async def create_token(
     )
 
 
-# List tokens (admin/owner only) 
+# List tokens (admin/owner only)
 @router.get(
     "/tokens",
     response_model=TokenListResponse,
@@ -149,7 +148,7 @@ async def list_tokens(
     return TokenListResponse(tokens=tokens, count=len(tokens))
 
 
-# Revoke token (admin/owner only) 
+# Revoke token (admin/owner only)
 @router.post(
     "/tokens/revoke",
     response_model=RevokeTokenResponse,
@@ -203,7 +202,7 @@ async def revoke_token(
     )
 
 
-# Identity introspection (agent) 
+# Identity introspection (agent)
 @router.get(
     "/me/agent",
     response_model=AgentInfoResponse,
@@ -222,7 +221,7 @@ async def whoami_agent(
     )
 
 
-# Identity introspection (user) 
+# Identity introspection (user)
 @router.get(
     "/me/user",
     response_model=UserInfoResponse,

@@ -13,12 +13,10 @@ Tests verify:
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, status
-from starlette.requests import Request
-
 from app.auth.dependencies import (
     AgentIdentity,
     UserIdentity,
@@ -29,16 +27,13 @@ from app.auth.dependencies import (
 )
 from app.auth.oidc import OIDCClaims
 from app.auth.schemas import (
-    AgentInfoResponse,
     CreateTokenRequest,
     CreateTokenResponse,
-    RevokeTokenResponse,
-    TokenListResponse,
-    TokenSummary,
-    UserInfoResponse,
 )
 from app.db.models import MembershipRole
 from app.main import app
+from fastapi import HTTPException, status
+from starlette.requests import Request
 
 
 def _make_mock_request(headers: dict[str, str] | None = None) -> Request:
@@ -53,7 +48,7 @@ def _make_mock_request(headers: dict[str, str] | None = None) -> Request:
     return Request(scope)
 
 
-# 1. Bearer token extraction 
+# 1. Bearer token extraction
 def test_extract_bearer_token_success():
     req = _make_mock_request({"Authorization": "Bearer cusp_secret_token_123"})
     assert _extract_bearer_token(req) == "cusp_secret_token_123"
@@ -74,7 +69,7 @@ def test_extract_bearer_token_whitespace():
     assert _extract_bearer_token(req) == "cusp_token_with_spaces"
 
 
-# 2. get_current_agent dependency 
+# 2. get_current_agent dependency
 @pytest.mark.asyncio
 async def test_get_current_agent_missing_header():
     req = _make_mock_request({})
@@ -92,7 +87,9 @@ async def test_get_current_agent_invalid_token():
     req = _make_mock_request({"Authorization": "Bearer cusp_invalid_token"})
     db = AsyncMock()
 
-    with patch("app.auth.dependencies.validate_service_token", new_callable=AsyncMock) as mock_val:
+    with patch(
+        "app.auth.dependencies.validate_service_token", new_callable=AsyncMock
+    ) as mock_val:
         mock_val.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
@@ -125,7 +122,9 @@ async def test_get_current_agent_success():
     agent.organization = org
     token_row.agent = agent
 
-    with patch("app.auth.dependencies.validate_service_token", new_callable=AsyncMock) as mock_val:
+    with patch(
+        "app.auth.dependencies.validate_service_token", new_callable=AsyncMock
+    ) as mock_val:
         mock_val.return_value = token_row
 
         identity = await get_current_agent(req, db)
@@ -172,9 +171,12 @@ async def test_get_current_user_no_membership():
     exec_result.scalars.return_value.all.return_value = []
     db.execute.return_value = exec_result
 
-    with patch("app.auth.dependencies.get_settings") as settings, patch(
-        "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
-    ) as verify:
+    with (
+        patch("app.auth.dependencies.get_settings") as settings,
+        patch(
+            "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
+        ) as verify,
+    ):
         settings.return_value.oidc_issuer_url = "https://issuer.example"
         settings.return_value.oidc_jwks_url = "https://issuer.example/jwks"
         settings.return_value.oidc_audience = "cusp-dashboard"
@@ -210,9 +212,12 @@ async def test_get_current_user_success():
     exec_result.scalars.return_value.all.return_value = [membership_obj]
     db.execute.return_value = exec_result
 
-    with patch("app.auth.dependencies.get_settings") as settings, patch(
-        "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
-    ) as verify:
+    with (
+        patch("app.auth.dependencies.get_settings") as settings,
+        patch(
+            "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
+        ) as verify,
+    ):
         settings.return_value.oidc_issuer_url = "https://issuer.example"
         settings.return_value.oidc_jwks_url = "https://issuer.example/jwks"
         settings.return_value.oidc_audience = "cusp-dashboard"
@@ -227,7 +232,7 @@ async def test_get_current_user_success():
     assert user_identity.role == MembershipRole.owner
 
 
-# 4. require_role guard 
+# 4. require_role guard
 @pytest.mark.asyncio
 async def test_require_role_allowed():
     guard = require_role(MembershipRole.owner, MembershipRole.admin)
@@ -265,7 +270,7 @@ async def test_require_role_denied():
     assert "Requires one of roles" in exc_info.value.detail
 
 
-# 5. Schemas validation 
+# 5. Schemas validation
 def test_create_token_schemas():
     agent_id = uuid.uuid4()
     req = CreateTokenRequest(agent_public_id=agent_id, label="CI Runner")
@@ -274,18 +279,19 @@ def test_create_token_schemas():
     assert req.scopes == {}
 
     token_id = uuid.uuid4()
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     resp = CreateTokenResponse(
         token_public_id=token_id,
         raw_token="cusp_raw123",
         label="CI Runner",
         scopes={"actions": ["read"]},
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     assert resp.raw_token == "cusp_raw123"
 
 
-# 6. App route registration 
+# 6. App route registration
 def test_routes_registered_in_app():
     openapi_schema = app.openapi()
     paths = set(openapi_schema["paths"].keys())

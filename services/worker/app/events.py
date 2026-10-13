@@ -7,11 +7,10 @@ from __future__ import annotations
 import enum
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 EVENTS_STREAM_NAME: str = "cusp:v1:events"
 DEAD_LETTER_STREAM_NAME: str = "cusp:v1:events:dead"
@@ -33,17 +32,19 @@ class CuspEventType(str, enum.Enum):
 
 class CuspEvent(BaseModel):
     """Event envelope parsed from Redis Streams."""
+
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     event_type: str
     org_id: int
     session_id: int | None = None
     agent_id: int | None = None
     correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     payload: dict[str, Any] = Field(default_factory=dict)
 
     def to_stream_entry(self) -> dict[str, str]:
         """Convert event envelope to Redis XADD string dictionary."""
+
         def _json_serial(obj):
             if isinstance(obj, (datetime,)):
                 return obj.isoformat()
@@ -55,7 +56,9 @@ class CuspEvent(BaseModel):
 
         return {
             "event_id": self.event_id,
-            "event_type": self.event_type.value if isinstance(self.event_type, enum.Enum) else str(self.event_type),
+            "event_type": self.event_type.value
+            if isinstance(self.event_type, enum.Enum)
+            else str(self.event_type),
             "org_id": str(self.org_id),
             "session_id": str(self.session_id) if self.session_id is not None else "",
             "agent_id": str(self.agent_id) if self.agent_id is not None else "",
@@ -76,7 +79,7 @@ class CuspEvent(BaseModel):
         payload_raw = decoded.get("payload", "{}")
         try:
             payload = json.loads(payload_raw) if payload_raw else {}
-        except Exception:
+        except (TypeError, ValueError, json.JSONDecodeError):
             payload = {"raw": payload_raw}
 
         session_id_raw = decoded.get("session_id", "").strip()
@@ -87,9 +90,9 @@ class CuspEvent(BaseModel):
             try:
                 timestamp = datetime.fromisoformat(ts_raw)
             except ValueError:
-                timestamp = datetime.now(timezone.utc)
+                timestamp = datetime.now(UTC)
         else:
-            timestamp = datetime.now(timezone.utc)
+            timestamp = datetime.now(UTC)
 
         return cls(
             event_id=decoded.get("event_id", str(uuid.uuid4())),

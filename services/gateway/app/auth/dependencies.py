@@ -13,12 +13,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.auth.oidc import OIDCVerificationError, verify_oidc_token
+from app.auth.service_tokens import validate_service_token
 from app.config.settings import get_settings
 from app.db import get_db
 from app.db.models import (
@@ -29,14 +25,18 @@ from app.db.models import (
     ServiceToken,
     User,
 )
-from app.auth.service_tokens import validate_service_token
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+# Resolved identity containers
 
-# Resolved identity containers 
 
 @dataclass(frozen=True, slots=True)
 class AgentIdentity:
     """Resolved identity for an authenticated agent."""
+
     token_id: int
     token_public_id: uuid.UUID
     agent_id: int
@@ -51,6 +51,7 @@ class AgentIdentity:
 @dataclass(frozen=True, slots=True)
 class UserIdentity:
     """Resolved identity for an authenticated dashboard user."""
+
     user_id: int
     user_public_id: uuid.UUID
     email: str
@@ -60,7 +61,7 @@ class UserIdentity:
     role: MembershipRole
 
 
-# Helper: extract bearer token from request 
+# Helper: extract bearer token from request
 def _extract_bearer_token(request: Request) -> str | None:
     """Pull a Bearer token from the Authorization header."""
     auth_header = request.headers.get("Authorization", "")
@@ -69,7 +70,7 @@ def _extract_bearer_token(request: Request) -> str | None:
     return None
 
 
-# Agent dependency 
+# Agent dependency
 async def get_current_agent(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -125,7 +126,9 @@ async def get_current_user(
     bearer token. Organization membership is resolved from the database; no
     request header or caller-selected organization is trusted.
     """
-    raw_token = request.cookies.get("cusp_oidc_id_token") or _extract_bearer_token(request)
+    raw_token = request.cookies.get("cusp_oidc_id_token") or _extract_bearer_token(
+        request
+    )
     if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -201,7 +204,7 @@ async def get_current_user(
     )
 
 
-# Role guard 
+# Role guard
 def require_role(*allowed_roles: MembershipRole):
     """
     Returns a FastAPI dependency that enforces the user has one of the
@@ -214,6 +217,7 @@ def require_role(*allowed_roles: MembershipRole):
         ):
             ...
     """
+
     async def _guard(
         user: UserIdentity = Depends(get_current_user),
     ) -> UserIdentity:
@@ -221,7 +225,7 @@ def require_role(*allowed_roles: MembershipRole):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Requires one of roles: {[r.value for r in allowed_roles]}. "
-                       f"You have: {user.role.value}.",
+                f"You have: {user.role.value}.",
             )
         return user
 

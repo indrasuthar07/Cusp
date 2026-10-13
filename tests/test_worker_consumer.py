@@ -24,7 +24,7 @@ from services.worker.app.events import CuspEvent, CuspEventType
 from services.worker.app.models import AuditEvent
 
 
-# 1. Consumer Group Creation 
+# 1. Consumer Group Creation
 @pytest.mark.asyncio
 async def test_ensure_consumer_group_creates_stream():
     mock_redis = AsyncMock()
@@ -61,7 +61,7 @@ async def test_ensure_consumer_group_busygroup_handled():
     await consumer.ensure_consumer_group()
 
 
-# 2. Audit Event Database Persistence 
+# 2. Audit Event Database Persistence
 @pytest.mark.asyncio
 async def test_handle_event_persists_to_audit_events():
     mock_session = AsyncMock()
@@ -88,7 +88,7 @@ async def test_handle_event_persists_to_audit_events():
     assert saved_record.payload == {"action": "run_command", "status": "approved"}
 
 
-# 3. Batch Consumption & Message ACKs 
+# 3. Batch Consumption & Message ACKs
 @pytest.mark.asyncio
 async def test_consume_batch_success_and_ack():
     mock_redis = AsyncMock()
@@ -132,7 +132,7 @@ async def test_consume_batch_success_and_ack():
     )
 
 
-# 4. Retry Backoff & DLQ on Poison Pills 
+# 4. Retry Backoff & DLQ on Poison Pills
 @pytest.mark.asyncio
 async def test_consume_batch_retries_and_dlq():
     mock_redis = AsyncMock()
@@ -161,7 +161,7 @@ async def test_consume_batch_retries_and_dlq():
 
     # DLQ xadd must be called
     mock_redis.xadd.assert_called_once()
-    dlq_args, dlq_kwargs = mock_redis.xadd.call_args
+    dlq_args, _dlq_kwargs = mock_redis.xadd.call_args
     assert dlq_args[0] == settings.dead_letter_stream
     assert dlq_args[1]["failed_msg_id"] == "poison-msg-1"
     assert "invalid" in dlq_args[1]["raw_fields"]
@@ -174,12 +174,13 @@ async def test_consume_batch_retries_and_dlq():
     )
 
 
-# 5. Clean Shutdown 
+# 5. Clean Shutdown
 def test_consumer_stop():
     consumer = WorkerConsumer()
     consumer.is_running = True
     consumer.stop()
     assert consumer.is_running is False
+
 
 @pytest.mark.asyncio
 async def test_pending_messages_are_reclaimed_after_restart():
@@ -203,7 +204,9 @@ async def test_pending_messages_are_reclaimed_after_restart():
         start_id="0-0",
         count=settings.batch_size,
     )
-    mock_redis.xack.assert_awaited_once_with(settings.stream_name, settings.consumer_group, "9-0")
+    mock_redis.xack.assert_awaited_once_with(
+        settings.stream_name, settings.consumer_group, "9-0"
+    )
 
 
 @pytest.mark.asyncio
@@ -217,6 +220,7 @@ async def test_retry_attempts_survive_consumer_restart():
     assert await first._retry_attempt("restart-1") == 1
     assert await second._retry_attempt("restart-1") == 2
     assert mock_redis.hincrby.await_count == 2
+
 
 @pytest.mark.asyncio
 async def test_dlq_redacts_payload_and_replay_redacts_again():

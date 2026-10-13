@@ -27,7 +27,10 @@ def redact_payload(value: Any, *, key: str = "") -> Any:
     if _SENSITIVE_KEY.search(key):
         return REDACTED_VALUE
     if isinstance(value, dict):
-        return {str(child_key): redact_payload(child, key=str(child_key)) for child_key, child in value.items()}
+        return {
+            str(child_key): redact_payload(child, key=str(child_key))
+            for child_key, child in value.items()
+        }
     if isinstance(value, list):
         return [redact_payload(child, key=key) for child in value]
     if isinstance(value, str):
@@ -39,11 +42,21 @@ def redact_stream_fields(fields: dict[Any, Any]) -> dict[str, str]:
     """Normalize and redact raw Redis fields for DLQ storage/replay."""
     result: dict[str, str] = {}
     for key, value in fields.items():
-        key_str = key.decode("utf-8", errors="replace") if isinstance(key, bytes) else str(key)
-        value_str = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+        key_str = (
+            key.decode("utf-8", errors="replace")
+            if isinstance(key, bytes)
+            else str(key)
+        )
+        value_str = (
+            value.decode("utf-8", errors="replace")
+            if isinstance(value, bytes)
+            else str(value)
+        )
         if key_str == "payload":
             try:
-                value_str = json.dumps(redact_payload(json.loads(value_str)), separators=(",", ":"))
+                value_str = json.dumps(
+                    redact_payload(json.loads(value_str)), separators=(",", ":")
+                )
             except (TypeError, ValueError):
                 value_str = redact_text(value_str)
         else:

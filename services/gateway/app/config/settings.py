@@ -30,6 +30,7 @@ class EnergyTelemetryMode(StrEnum):
     estimated = "estimated"
     measured = "measured"
 
+
 class Settings(BaseSettings):
     """Gateway settings with fail-fast cross-field validation."""
 
@@ -87,25 +88,44 @@ class Settings(BaseSettings):
     @staticmethod
     def _validate_catalog(path: Path) -> None:
         if not path.is_file():
-            raise ValueError("CUSP_PRICING_CATALOG_PATH must point to a readable JSON file")
+            raise ValueError(
+                "CUSP_PRICING_CATALOG_PATH must point to a readable JSON file"
+            )
         try:
             catalog: Any = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ValueError("CUSP_PRICING_CATALOG_PATH must contain valid JSON") from exc
+            raise ValueError(
+                "CUSP_PRICING_CATALOG_PATH must contain valid JSON"
+            ) from exc
         if not isinstance(catalog, dict) or catalog.get("version") != 1:
             raise ValueError("pricing catalogue must be an object with version 1")
         if not isinstance(catalog.get("profiles"), dict) or not catalog["profiles"]:
-            raise ValueError("pricing catalogue must define at least one provider profile")
+            raise ValueError(
+                "pricing catalogue must define at least one provider profile"
+            )
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> Settings:
         self._validate_catalog(self.cusp_pricing_catalog_path)
 
-        if self.cusp_log_level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
-            raise ValueError("CUSP_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+        if self.cusp_log_level.upper() not in {
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        }:
+            raise ValueError(
+                "CUSP_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
 
-        if self.cusp_energy_telemetry_mode is EnergyTelemetryMode.estimated and self.cusp_host_wattage_estimate is None:
-            raise ValueError("CUSP_HOST_WATTAGE_ESTIMATE is required when energy mode is estimated")
+        if (
+            self.cusp_energy_telemetry_mode is EnergyTelemetryMode.estimated
+            and self.cusp_host_wattage_estimate is None
+        ):
+            raise ValueError(
+                "CUSP_HOST_WATTAGE_ESTIMATE is required when energy mode is estimated"
+            )
         if self.cusp_energy_telemetry_mode is EnergyTelemetryMode.off:
             self.cusp_host_wattage_estimate = None
 
@@ -118,34 +138,65 @@ class Settings(BaseSettings):
         }
         configured_hosted_keys = [name for name, value in hosted_keys.items() if value]
         if configured_hosted_keys and not self.cusp_hosted_egress_allowed:
-            raise ValueError("hosted provider credentials require CUSP_HOSTED_EGRESS_ALLOWED=true")
+            raise ValueError(
+                "hosted provider credentials require CUSP_HOSTED_EGRESS_ALLOWED=true"
+            )
         if self.cusp_hosted_egress_allowed:
-            if self.cusp_hosted_egress_ack_version != self.hosted_egress_acknowledgement_version:
-                raise ValueError("CUSP_HOSTED_EGRESS_ACK_VERSION must be v1 when hosted egress is enabled")
+            if (
+                self.cusp_hosted_egress_ack_version
+                != self.hosted_egress_acknowledgement_version
+            ):
+                raise ValueError(
+                    "CUSP_HOSTED_EGRESS_ACK_VERSION must be v1 when hosted egress is enabled"
+                )
         elif self.cusp_hosted_egress_ack_version is not None:
-            raise ValueError("CUSP_HOSTED_EGRESS_ACK_VERSION requires hosted egress to be enabled")
+            raise ValueError(
+                "CUSP_HOSTED_EGRESS_ACK_VERSION requires hosted egress to be enabled"
+            )
 
         if self.cusp_env is CuspEnvironment.production:
-            if "database_url" not in self.model_fields_set or "redis_url" not in self.model_fields_set:
-                raise ValueError("production gateway requires explicit DATABASE_URL and REDIS_URL")
-            if str(self.database_url) == "postgresql+asyncpg://cusp:cusp_dev_only@localhost:5432/cusp":
-                raise ValueError("production DATABASE_URL cannot use the development default")
+            if (
+                "database_url" not in self.model_fields_set
+                or "redis_url" not in self.model_fields_set
+            ):
+                raise ValueError(
+                    "production gateway requires explicit DATABASE_URL and REDIS_URL"
+                )
+            if (
+                str(self.database_url)
+                == "postgresql+asyncpg://cusp:cusp_dev_only@localhost:5432/cusp"
+            ):
+                raise ValueError(
+                    "production DATABASE_URL cannot use the development default"
+                )
             if str(self.redis_url) == "redis://localhost:6379/0":
-                raise ValueError("production REDIS_URL cannot use the development default")
+                raise ValueError(
+                    "production REDIS_URL cannot use the development default"
+                )
             session_secret = self._secret_value(self.cusp_session_secret)
             token_pepper = self._secret_value(self.cusp_token_pepper)
             if len(session_secret) < 32 or len(token_pepper) < 32:
-                raise ValueError("production session secret and token pepper must each be at least 32 characters")
+                raise ValueError(
+                    "production session secret and token pepper must each be at least 32 characters"
+                )
             if session_secret.lower() in {"changeme", "secret", "development"}:
                 raise ValueError("CUSP_SESSION_SECRET is a known development value")
             if token_pepper.lower() in {"changeme", "secret", "development"}:
                 raise ValueError("CUSP_TOKEN_PEPPER is a known development value")
             if not self.cusp_mcp_upstream_allowlist.strip():
-                raise ValueError("CUSP_MCP_UPSTREAM_ALLOWLIST is required in production")
+                raise ValueError(
+                    "CUSP_MCP_UPSTREAM_ALLOWLIST is required in production"
+                )
             if not self.cusp_pricing_catalog_path.is_absolute():
                 raise ValueError("production pricing catalogue path must be absolute")
-            if self.oidc_issuer_url is None or not self.oidc_audience.strip() or self.oidc_jwks_url is None:
-                raise ValueError("production dashboard authentication requires OIDC issuer, audience, and JWKS URL")
+            if (
+                self.oidc_issuer_url is None
+                or not self.oidc_audience.strip()
+                or self.oidc_jwks_url is None
+            ):
+                raise ValueError(
+                    "production dashboard authentication requires OIDC issuer, audience, and JWKS URL"
+                )
 
         return self
 

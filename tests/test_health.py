@@ -28,7 +28,11 @@ async def test_health_check_all_healthy():
 
     with (
         patch("app.api.health.get_engine", return_value=mock_engine),
-        patch("app.api.health.get_redis_client", new_callable=AsyncMock, return_value=mock_redis),
+        patch(
+            "app.api.health.get_redis_client",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ),
     ):
         result = await health_check(mock_resp)
 
@@ -51,7 +55,11 @@ async def test_health_check_db_failure():
 
     with (
         patch("app.api.health.get_engine", return_value=mock_engine),
-        patch("app.api.health.get_redis_client", new_callable=AsyncMock, return_value=mock_redis),
+        patch(
+            "app.api.health.get_redis_client",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ),
     ):
         result = await health_check(mock_resp)
 
@@ -75,7 +83,11 @@ async def test_health_check_redis_failure():
 
     with (
         patch("app.api.health.get_engine", return_value=mock_engine),
-        patch("app.api.health.get_redis_client", new_callable=AsyncMock, return_value=mock_redis),
+        patch(
+            "app.api.health.get_redis_client",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ),
     ):
         result = await health_check(mock_resp)
 
@@ -98,7 +110,11 @@ async def test_health_check_does_not_expose_dependency_exception(caplog):
 
     with (
         patch("app.api.health.get_engine", return_value=mock_engine),
-        patch("app.api.health.get_redis_client", new_callable=AsyncMock, return_value=mock_redis),
+        patch(
+            "app.api.health.get_redis_client",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ),
     ):
         result = await health_check(mock_resp)
 

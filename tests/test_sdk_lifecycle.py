@@ -28,7 +28,9 @@ from cusp.providers.ollama import OllamaAdapter, OllamaConfig
 async def test_offline_fake_reference_run_completes_without_hosted_provider() -> None:
     transport = InMemoryGatewayTransport()
     client = CuspClient(transport)
-    run = await client.create_run(budget_cap_micro_usd=100, metadata={"mode": "offline"})
+    run = await client.create_run(
+        budget_cap_micro_usd=100, metadata={"mode": "offline"}
+    )
     action, decision = await run.preflight(
         action_type="model_call",
         provider_profile="fake",
@@ -54,7 +56,10 @@ async def test_offline_fake_reference_run_completes_without_hosted_provider() ->
 @pytest.mark.asyncio
 async def test_fake_scenarios_are_deterministic_and_typed() -> None:
     no_progress = DeterministicFakeAdapter(FakeScenario.NO_PROGRESS)
-    assert no_progress.generate(ProviderRequest("x", "deterministic")).content == "No progress was made."
+    assert (
+        no_progress.generate(ProviderRequest("x", "deterministic")).content
+        == "No progress was made."
+    )
 
     transient = DeterministicFakeAdapter(FakeScenario.TRANSIENT_FAILURE)
     with pytest.raises(AdapterError) as first_error:
@@ -75,7 +80,9 @@ async def test_budget_pause_cannot_invoke_provider() -> None:
     assert decision.reason_code == "budget_cap_exceeded"
     assert run.run.state is RunState.RUNNING
     with pytest.raises(GovernanceBlocked):
-        await run.invoke(action, DeterministicFakeAdapter(), prompt="x", model="deterministic")
+        await run.invoke(
+            action, DeterministicFakeAdapter(), prompt="x", model="deterministic"
+        )
 
 
 @pytest.mark.asyncio
@@ -91,10 +98,14 @@ async def test_control_poll_applies_pause_and_terminate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_duplicate_preflight_returns_original_decision_and_reserves_once() -> None:
+async def test_duplicate_preflight_returns_original_decision_and_reserves_once() -> (
+    None
+):
     transport = InMemoryGatewayTransport()
     run = await CuspClient(transport).create_run(budget_cap_micro_usd=10)
-    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 6, "idem-1")
+    action = ActionRequest(
+        "action-1", run.run.run_id, 1, "model_call", "fake", 6, "idem-1"
+    )
 
     first = await transport.preflight(action)
     duplicate = await transport.preflight(action)
@@ -108,8 +119,12 @@ async def test_duplicate_preflight_returns_original_decision_and_reserves_once()
 async def test_rejected_preflight_key_can_retry_after_budget_release() -> None:
     transport = InMemoryGatewayTransport()
     run = await CuspClient(transport).create_run(budget_cap_micro_usd=5)
-    accepted = ActionRequest("accepted", run.run.run_id, 1, "model_call", "fake", 5, "accepted")
-    rejected = ActionRequest("rejected", run.run.run_id, 2, "model_call", "fake", 5, "retryable")
+    accepted = ActionRequest(
+        "accepted", run.run.run_id, 1, "model_call", "fake", 5, "accepted"
+    )
+    rejected = ActionRequest(
+        "rejected", run.run.run_id, 2, "model_call", "fake", 5, "retryable"
+    )
 
     assert (await transport.preflight(accepted)).verdict.value == "allow"
     assert (await transport.preflight(rejected)).reason_code == "budget_cap_exceeded"
@@ -126,16 +141,28 @@ async def test_concurrent_preflight_never_exceeds_budget() -> None:
     transport = InMemoryGatewayTransport()
     run = await CuspClient(transport).create_run(budget_cap_micro_usd=3)
     actions = [
-        ActionRequest(f"action-{index}", run.run.run_id, index, "model_call", "fake", 1, f"idem-{index}")
+        ActionRequest(
+            f"action-{index}",
+            run.run.run_id,
+            index,
+            "model_call",
+            "fake",
+            1,
+            f"idem-{index}",
+        )
         for index in range(8)
     ]
-    decisions = await asyncio.gather(*(transport.preflight(action) for action in actions))
+    decisions = await asyncio.gather(
+        *(transport.preflight(action) for action in actions)
+    )
 
     assert sum(decision.verdict.value == "allow" for decision in decisions) == 3
     assert transport.reserved[run.run.run_id] == 3
     for action, decision in zip(actions, decisions, strict=True):
         if decision.verdict.value == "allow":
-            await transport.report_completion(CompletionReport(action.action_id, "completed", 1))
+            await transport.report_completion(
+                CompletionReport(action.action_id, "completed", 1)
+            )
     assert transport.reserved[run.run.run_id] == 0
     assert transport.reserved[run.run.run_id] >= 0
 
@@ -144,7 +171,9 @@ async def test_concurrent_preflight_never_exceeds_budget() -> None:
 async def test_duplicate_completion_releases_reservation_only_once() -> None:
     transport = InMemoryGatewayTransport()
     run = await CuspClient(transport).create_run(budget_cap_micro_usd=10)
-    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 4, "idem-1")
+    action = ActionRequest(
+        "action-1", run.run.run_id, 1, "model_call", "fake", 4, "idem-1"
+    )
     await transport.preflight(action)
     report = CompletionReport(action.action_id, "completed", 3)
 
@@ -159,7 +188,9 @@ async def test_duplicate_completion_releases_reservation_only_once() -> None:
 async def test_actual_cost_overrun_is_reconciled_and_fails_run() -> None:
     transport = InMemoryGatewayTransport()
     run = await CuspClient(transport).create_run(budget_cap_micro_usd=5)
-    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 2, "idem-1")
+    action = ActionRequest(
+        "action-1", run.run.run_id, 1, "model_call", "fake", 2, "idem-1"
+    )
     await transport.preflight(action)
 
     report = CompletionReport(action.action_id, "completed", 8)
@@ -194,7 +225,11 @@ def test_ollama_health_and_generation_normalize_local_api() -> None:
             "provider": "ollama",
             "model": "llama3.2",
             "privacy_class": "offline_private",
-            "capabilities": {"streaming": True, "tools": True, "structured_output": True},
+            "capabilities": {
+                "streaming": True,
+                "tools": True,
+                "structured_output": True,
+            },
         }
     )
     responses = iter(
@@ -210,7 +245,10 @@ def test_ollama_health_and_generation_normalize_local_api() -> None:
             ),
         ]
     )
-    with patch("cusp.providers.ollama.adapter.urlopen", side_effect=lambda *args, **kwargs: next(responses)):
+    with patch(
+        "cusp.providers.ollama.adapter.urlopen",
+        side_effect=lambda *args, **kwargs: next(responses),
+    ):
         assert adapter.health().healthy is True
         result = adapter.generate(ProviderRequest("hello", "llama3.2"))
 
@@ -222,7 +260,10 @@ def test_ollama_health_and_generation_normalize_local_api() -> None:
 
 def test_ollama_unavailable_is_safe_and_non_secret() -> None:
     adapter = OllamaAdapter(OllamaConfig(base_url="http://localhost:11434"))
-    with patch("cusp.providers.ollama.adapter.urlopen", side_effect=OSError("connection secret")):
+    with patch(
+        "cusp.providers.ollama.adapter.urlopen",
+        side_effect=OSError("connection secret"),
+    ):
         health = adapter.health()
     assert health.healthy is False
     assert health.message == "ollama_unavailable"

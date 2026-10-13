@@ -85,34 +85,35 @@ class ControlCommand:
 class GatewayTransport(Protocol):
     """Async boundary between the SDK and a Cusp gateway implementation."""
 
-    async def create_run(self, budget_cap_micro_usd: int, metadata: dict[str, str]) -> Run:
-        ...
+    async def create_run(
+        self, budget_cap_micro_usd: int, metadata: dict[str, str]
+    ) -> Run: ...
 
-    async def preflight(self, action: ActionRequest) -> Decision:
-        ...
+    async def preflight(self, action: ActionRequest) -> Decision: ...
 
-    async def report_completion(self, report: CompletionReport) -> None:
-        ...
+    async def report_completion(self, report: CompletionReport) -> None: ...
 
-    async def poll_control(self, run_id: str) -> ControlCommand:
-        ...
+    async def poll_control(self, run_id: str) -> ControlCommand: ...
 
-    async def finish_run(self, run_id: str, state: RunState) -> None:
-        ...
+    async def finish_run(self, run_id: str, state: RunState) -> None: ...
 
 
 class GovernanceBlocked(RuntimeError):
     """Raised when governance does not authorize provider invocation."""
 
     def __init__(self, decision: Decision) -> None:
-        super().__init__(f"action blocked: {decision.verdict.value} ({decision.reason_code})")
+        super().__init__(
+            f"action blocked: {decision.verdict.value} ({decision.reason_code})"
+        )
         self.decision = decision
 
 
 class BudgetOverrun(RuntimeError):
     """Raised after actual provider usage exceeds the run budget."""
 
-    def __init__(self, action_id: str, actual_cost_micro_usd: int, budget_cap_micro_usd: int) -> None:
+    def __init__(
+        self, action_id: str, actual_cost_micro_usd: int, budget_cap_micro_usd: int
+    ) -> None:
         super().__init__(
             f"action {action_id} exceeded budget: "
             f"{actual_cost_micro_usd} > {budget_cap_micro_usd} micro-usd"
@@ -184,10 +185,23 @@ class CuspRun:
             action = replace(action, action_id=decision.action_id)
         self._actions[action.action_id] = action
         self._decisions[action.action_id] = decision
-        if decision.verdict in {DecisionVerdict.PAUSE, DecisionVerdict.ESCALATE} and decision.reason_code != "budget_cap_exceeded":
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.PAUSED, self.run.metadata)
+        if (
+            decision.verdict in {DecisionVerdict.PAUSE, DecisionVerdict.ESCALATE}
+            and decision.reason_code != "budget_cap_exceeded"
+        ):
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.PAUSED,
+                self.run.metadata,
+            )
         elif decision.verdict is DecisionVerdict.KILL:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.TERMINATED, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.TERMINATED,
+                self.run.metadata,
+            )
         return action, decision
 
     async def invoke(
@@ -211,7 +225,9 @@ class CuspRun:
             raise ValueError(
                 f"adapter {adapter.provider_kind!r} does not match approved profile {approved_profile!r}"
             )
-        request = ProviderRequest(prompt=prompt, model=model, stream=stream, tools=tools)
+        request = ProviderRequest(
+            prompt=prompt, model=model, stream=stream, tools=tools
+        )
         try:
             response = await asyncio.to_thread(adapter.generate, request)
         except Exception as exc:
@@ -227,10 +243,17 @@ class CuspRun:
         )
         try:
             await self._transport.report_completion(
-                CompletionReport(action.action_id, "completed", actual_cost, response.usage)
+                CompletionReport(
+                    action.action_id, "completed", actual_cost, response.usage
+                )
             )
         except BudgetOverrun:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.FAILED, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.FAILED,
+                self.run.metadata,
+            )
             raise
         return response
 
@@ -242,23 +265,49 @@ class CuspRun:
         try:
             await self._transport.report_completion(report)
         except BudgetOverrun:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.FAILED, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.FAILED,
+                self.run.metadata,
+            )
             raise
 
     async def poll_control(self) -> ControlCommand:
         command = await self._transport.poll_control(self.run.run_id)
         if command.action is ControlAction.PAUSE:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.PAUSED, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.PAUSED,
+                self.run.metadata,
+            )
         elif command.action is ControlAction.RESUME:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.RUNNING, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.RUNNING,
+                self.run.metadata,
+            )
         elif command.action is ControlAction.TERMINATE:
-            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.TERMINATED, self.run.metadata)
+            self.run = Run(
+                self.run.run_id,
+                self.run.budget_cap_micro_usd,
+                RunState.TERMINATED,
+                self.run.metadata,
+            )
         return command
 
-    async def control_loop(self, interval_seconds: float = 1.0) -> AsyncIterator[ControlCommand]:
+    async def control_loop(
+        self, interval_seconds: float = 1.0
+    ) -> AsyncIterator[ControlCommand]:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
-        while self.run.state not in {RunState.COMPLETED, RunState.TERMINATED, RunState.FAILED}:
+        while self.run.state not in {
+            RunState.COMPLETED,
+            RunState.TERMINATED,
+            RunState.FAILED,
+        }:
             command = await self.poll_control()
             yield command
             if command.action is ControlAction.TERMINATE:
@@ -269,7 +318,9 @@ class CuspRun:
         if state not in {RunState.COMPLETED, RunState.TERMINATED, RunState.FAILED}:
             raise ValueError("finish state must be terminal")
         await self._transport.finish_run(self.run.run_id, state)
-        self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, state, self.run.metadata)
+        self.run = Run(
+            self.run.run_id, self.run.budget_cap_micro_usd, state, self.run.metadata
+        )
 
 
 class InMemoryGatewayTransport:
@@ -287,7 +338,9 @@ class InMemoryGatewayTransport:
         self.controls: dict[str, ControlCommand] = {}
         self._lock = asyncio.Lock()
 
-    async def create_run(self, budget_cap_micro_usd: int, metadata: dict[str, str]) -> Run:
+    async def create_run(
+        self, budget_cap_micro_usd: int, metadata: dict[str, str]
+    ) -> Run:
         run = Run(str(uuid.uuid4()), budget_cap_micro_usd, metadata=metadata)
         self.runs[run.run_id] = run
         self.spent[run.run_id] = 0
@@ -304,7 +357,8 @@ class InMemoryGatewayTransport:
                     original_action.run_id != action.run_id
                     or original_action.action_type != action.action_type
                     or original_action.provider_profile != action.provider_profile
-                    or original_action.estimated_cost_micro_usd != action.estimated_cost_micro_usd
+                    or original_action.estimated_cost_micro_usd
+                    != action.estimated_cost_micro_usd
                     or original_action.data_classification != action.data_classification
                     or original_action.summary != action.summary
                 ):
@@ -313,7 +367,9 @@ class InMemoryGatewayTransport:
 
             run = self.runs[action.run_id]
             if run.state is not RunState.RUNNING:
-                return Decision(action.action_id, DecisionVerdict.PAUSE, f"run_{run.state.value}")
+                return Decision(
+                    action.action_id, DecisionVerdict.PAUSE, f"run_{run.state.value}"
+                )
             if (
                 self.spent[action.run_id]
                 + self.reserved[action.run_id]
@@ -322,9 +378,16 @@ class InMemoryGatewayTransport:
             ):
                 # Rejected reservations are deliberately not entered into the
                 # idempotency map, so a later retry can succeed after release.
-                return Decision(action.action_id, DecisionVerdict.PAUSE, "budget_cap_exceeded")
+                return Decision(
+                    action.action_id, DecisionVerdict.PAUSE, "budget_cap_exceeded"
+                )
 
-            decision = Decision(action.action_id, DecisionVerdict.ALLOW, "policy_allow", action.provider_profile)
+            decision = Decision(
+                action.action_id,
+                DecisionVerdict.ALLOW,
+                "policy_allow",
+                action.provider_profile,
+            )
             self.reserved[action.run_id] += action.estimated_cost_micro_usd
             self.reservations[action.action_id] = action.estimated_cost_micro_usd
             self.actions[action.action_id] = action
@@ -345,7 +408,10 @@ class InMemoryGatewayTransport:
             self.reserved[action.run_id] -= reservation
             self.spent[action.run_id] += report.actual_cost_micro_usd
             self.completions[report.action_id] = report
-            if self.spent[action.run_id] > self.runs[action.run_id].budget_cap_micro_usd:
+            if (
+                self.spent[action.run_id]
+                > self.runs[action.run_id].budget_cap_micro_usd
+            ):
                 self.completions[report.action_id] = replace(
                     report,
                     status="overrun",
@@ -370,4 +436,6 @@ class InMemoryGatewayTransport:
 
     async def finish_run(self, run_id: str, state: RunState) -> None:
         run = self.runs[run_id]
-        self.runs[run_id] = Run(run.run_id, run.budget_cap_micro_usd, state, run.metadata)
+        self.runs[run_id] = Run(
+            run.run_id, run.budget_cap_micro_usd, state, run.metadata
+        )

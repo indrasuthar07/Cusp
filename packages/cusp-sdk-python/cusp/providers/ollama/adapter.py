@@ -68,14 +68,22 @@ class OllamaAdapter:
         profile_capabilities = profile.get("capabilities")
         if profile_capabilities is not None:
             for name in ("streaming", "tools", "structured_output"):
-                if profile_capabilities.get(name) is False and getattr(self.capabilities, name):
-                    raise ValueError(f"Ollama profile disables required capability: {name}")
+                if profile_capabilities.get(name) is False and getattr(
+                    self.capabilities, name
+                ):
+                    raise ValueError(
+                        f"Ollama profile disables required capability: {name}"
+                    )
 
     def health(self) -> AdapterHealth:
         try:
             payload = self._request("GET", "/api/tags")
             models = payload.get("models", [])
-            model_names = {str(model.get("name", "")) for model in models if isinstance(model, dict)}
+            model_names = {
+                str(model.get("name", ""))
+                for model in models
+                if isinstance(model, dict)
+            }
             if self.config.model not in model_names:
                 return AdapterHealth(
                     healthy=False,
@@ -84,11 +92,16 @@ class OllamaAdapter:
                 )
             return AdapterHealth(healthy=True, provider=self.provider_kind)
         except AdapterError as exc:
-            return AdapterHealth(healthy=False, provider=self.provider_kind, message=exc.code)
+            return AdapterHealth(
+                healthy=False, provider=self.provider_kind, message=exc.code
+            )
 
     def generate(self, request: ProviderRequest) -> ProviderResponse:
         if request.stream:
-            raise AdapterError("streaming_not_supported_by_sync_adapter", "use a streaming adapter method")
+            raise AdapterError(
+                "streaming_not_supported_by_sync_adapter",
+                "use a streaming adapter method",
+            )
         started = time.perf_counter()
         payload = self._request(
             "POST",
@@ -102,7 +115,10 @@ class OllamaAdapter:
         )
         message = payload.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):
-            raise AdapterError("ollama_invalid_response", "Ollama response did not contain message content")
+            raise AdapterError(
+                "ollama_invalid_response",
+                "Ollama response did not contain message content",
+            )
         return ProviderResponse(
             content=message["content"],
             usage=Usage(
@@ -112,7 +128,9 @@ class OllamaAdapter:
                 cost_provenance=CostProvenance.VIRTUAL,
                 latency_ms=round((time.perf_counter() - started) * 1000),
             ),
-            finish_reason=str(payload.get("done_reason")) if payload.get("done_reason") else None,
+            finish_reason=str(payload.get("done_reason"))
+            if payload.get("done_reason")
+            else None,
             raw_metadata={"load_duration_ns": payload.get("load_duration")},
         )
 
@@ -120,7 +138,9 @@ class OllamaAdapter:
     def _non_negative_int(value: Any) -> int:
         return value if isinstance(value, int) and value >= 0 else 0
 
-    def _request(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         url = urljoin(self.config.base_url.rstrip("/") + "/", path.lstrip("/"))
         headers = {"Accept": "application/json"}
         data: bytes | None = None
@@ -135,11 +155,21 @@ class OllamaAdapter:
                 decoded = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             retryable = exc.code in {408, 429, 500, 502, 503, 504}
-            raise AdapterError("ollama_http_error", f"Ollama returned HTTP {exc.code}", retryable=retryable) from exc
+            raise AdapterError(
+                "ollama_http_error",
+                f"Ollama returned HTTP {exc.code}",
+                retryable=retryable,
+            ) from exc
         except (URLError, TimeoutError, OSError) as exc:
-            raise AdapterError("ollama_unavailable", "Ollama is unavailable", retryable=True) from exc
+            raise AdapterError(
+                "ollama_unavailable", "Ollama is unavailable", retryable=True
+            ) from exc
         except (UnicodeError, json.JSONDecodeError) as exc:
-            raise AdapterError("ollama_invalid_response", "Ollama returned invalid JSON") from exc
+            raise AdapterError(
+                "ollama_invalid_response", "Ollama returned invalid JSON"
+            ) from exc
         if not isinstance(decoded, dict):
-            raise AdapterError("ollama_invalid_response", "Ollama returned a non-object response")
+            raise AdapterError(
+                "ollama_invalid_response", "Ollama returned a non-object response"
+            )
         return decoded

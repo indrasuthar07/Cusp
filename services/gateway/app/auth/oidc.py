@@ -31,11 +31,15 @@ def _jwks_client(jwks_url: str) -> Any:
     return jwt.PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=300)
 
 
-def _verify_sync(token: str, *, issuer: str, audience: str, jwks_url: str) -> OIDCClaims:
+def _verify_sync(
+    token: str, *, issuer: str, audience: str, jwks_url: str
+) -> OIDCClaims:
     try:
         import jwt
     except ImportError as exc:
-        raise OIDCVerificationError("OIDC verification dependency is unavailable") from exc
+        raise OIDCVerificationError(
+            "OIDC verification dependency is unavailable"
+        ) from exc
     if not token or token.count(".") != 2:
         raise OIDCVerificationError("invalid OIDC token")
     try:
@@ -59,7 +63,12 @@ def _verify_sync(token: str, *, issuer: str, audience: str, jwks_url: str) -> OI
         raise OIDCVerificationError("OIDC token has no email")
     display_name = claims.get("name") or claims.get("preferred_username") or email
     organization_id = claims.get("organization_id") or claims.get("org_id")
-    return OIDCClaims(subject, email, str(display_name), str(organization_id) if organization_id else None)
+    return OIDCClaims(
+        subject,
+        email,
+        str(display_name),
+        str(organization_id) if organization_id else None,
+    )
 
 
 async def verify_oidc_token(

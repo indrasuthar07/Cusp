@@ -1,0 +1,80 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python tests, lint, format, and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install workspace dependencies
+        run: uv sync --all-packages --dev
+      - name: Run tests
+        run: uv run pytest -q
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Pyright type check
+        run: uv run pyright
+      - name: Dependency audit
+        run: |
+          uv export --no-emit-workspace --no-dev --format requirements-txt \
+            --output-file /tmp/cusp-requirements.txt
+          uv run pip-audit --strict -r /tmp/cusp-requirements.txt
+
+  dashboard:
+    name: Dashboard lint, types, and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/dashboard/pnpm-lock.yaml
+      - name: Install dashboard dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint dashboard
+        run: pnpm lint
+      - name: Type check dashboard
+        run: pnpm exec tsc -b
+      - name: Build dashboard
+        run: pnpm build
+      - name: Audit dashboard dependencies
+        run: pnpm audit --audit-level high
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

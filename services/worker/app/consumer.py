@@ -147,7 +147,10 @@ class WorkerConsumer:
     async def process_message(self, msg_id: str, fields: dict[Any, Any]) -> None:
         """Parse raw Redis entry and execute database persistence."""
         event = CuspEvent.from_stream_entry(fields)
-        if not any((key.decode("utf-8") if isinstance(key, bytes) else str(key)) == "event_id" for key in fields):
+        if not any(
+            (key.decode("utf-8") if isinstance(key, bytes) else str(key)) == "event_id"
+            for key in fields
+        ):
             # Malformed/legacy entries still get a stable ledger identity on replay.
             event.event_id = f"stream:{msg_id}"
 
@@ -159,7 +162,9 @@ class WorkerConsumer:
             async with get_worker_db() as session:
                 await self._persist_idempotently(event, session)
 
-    async def _persist_idempotently(self, event: CuspEvent, session: AsyncSession) -> None:
+    async def _persist_idempotently(
+        self, event: CuspEvent, session: AsyncSession
+    ) -> None:
         """Flush inside a savepoint so duplicate event IDs are harmless."""
         nested = session.begin_nested()
         if inspect.isawaitable(nested):
@@ -176,9 +181,15 @@ class WorkerConsumer:
         except IntegrityError as exc:
             constraint = getattr(getattr(exc, "orig", None), "diag", None)
             constraint_name = getattr(constraint, "constraint_name", "")
-            if constraint_name != "uq_audit_events_event_id" and "uq_audit_events_event_id" not in str(exc):
+            if (
+                constraint_name != "uq_audit_events_event_id"
+                and "uq_audit_events_event_id" not in str(exc)
+            ):
                 raise
-            logger.info("Audit event %s already persisted; acknowledging duplicate", event.event_id)
+            logger.info(
+                "Audit event %s already persisted; acknowledging duplicate",
+                event.event_id,
+            )
 
     async def send_to_dlq(
         self,
@@ -192,7 +203,9 @@ class WorkerConsumer:
         dlq_entry = {
             "failed_msg_id": msg_id,
             "error": redact_text(error_msg),
-            "retry_count": str(self._retry_counts.get(msg_id, self.settings.max_retries)),
+            "retry_count": str(
+                self._retry_counts.get(msg_id, self.settings.max_retries)
+            ),
             "raw_fields": json.dumps(safe_fields),
         }
         await client.xadd(self.settings.dead_letter_stream, dlq_entry)
@@ -213,7 +226,9 @@ class WorkerConsumer:
                 self._retry_counts[msg_id] = attempt
                 return attempt
         except Exception:
-            logger.debug("Unable to persist retry metadata for %s", msg_id, exc_info=True)
+            logger.debug(
+                "Unable to persist retry metadata for %s", msg_id, exc_info=True
+            )
         attempt = self._retry_counts.get(msg_id, 0) + 1
         self._retry_counts[msg_id] = attempt
         return attempt
@@ -230,13 +245,17 @@ class WorkerConsumer:
         client = await self.get_redis()
         total_processed = 0
         for msg_id_raw, fields in messages:
-            msg_id = msg_id_raw.decode("utf-8") if isinstance(msg_id_raw, bytes) else str(msg_id_raw)
+            msg_id = (
+                msg_id_raw.decode("utf-8")
+                if isinstance(msg_id_raw, bytes)
+                else str(msg_id_raw)
+            )
             try:
                 await self.process_message(msg_id, fields)
                 await client.xack(stream_name, self.settings.consumer_group, msg_id)
                 await self._clear_retry_attempt(msg_id)
                 total_processed += 1
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001 - failed handlers are retried/DLQ'd
                 retries = await self._retry_attempt(msg_id)
                 logger.warning(
                     "Error processing message %s (attempt %d/%d): %s",
@@ -265,7 +284,11 @@ class WorkerConsumer:
             )
             if not isinstance(result, (tuple, list)) or len(result) < 2:
                 return 0
-            self._claim_cursor = result[0].decode("utf-8") if isinstance(result[0], bytes) else str(result[0])
+            self._claim_cursor = (
+                result[0].decode("utf-8")
+                if isinstance(result[0], bytes)
+                else str(result[0])
+            )
             messages = result[1] or []
             return await self._process_entries(self.settings.stream_name, messages)
         except (AttributeError, TypeError, ValueError, ResponseError) as exc:
@@ -307,7 +330,7 @@ class WorkerConsumer:
                 count=self.settings.batch_size,
                 block=self.settings.block_time_ms,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep polling after Redis failures
             logger.error("Error reading from Redis Stream: %s", exc)
             return total_processed
 
@@ -316,7 +339,9 @@ class WorkerConsumer:
 
         for stream_name, messages in entries:
             stream_name_str = (
-                stream_name.decode("utf-8") if isinstance(stream_name, bytes) else str(stream_name)
+                stream_name.decode("utf-8")
+                if isinstance(stream_name, bytes)
+                else str(stream_name)
             )
             total_processed += await self._process_entries(stream_name_str, messages)
 
@@ -340,8 +365,8 @@ class WorkerConsumer:
                     await asyncio.sleep(0.05)
             except asyncio.CancelledError:
                 break
-            except Exception as exc:
-                logger.error("Unexpected error in consumer loop: %s", exc, exc_info=True)
+            except Exception:
+                logger.exception("Unexpected error in consumer loop")
                 await asyncio.sleep(1.0)
 
         logger.info("Worker consumer stopped cleanly.")
