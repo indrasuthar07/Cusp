@@ -6,7 +6,7 @@ import asyncio
 import secrets
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -109,6 +109,19 @@ class GovernanceBlocked(RuntimeError):
         self.decision = decision
 
 
+class BudgetOverrun(RuntimeError):
+    """Raised after actual provider usage exceeds the run budget."""
+
+    def __init__(self, action_id: str, actual_cost_micro_usd: int, budget_cap_micro_usd: int) -> None:
+        super().__init__(
+            f"action {action_id} exceeded budget: "
+            f"{actual_cost_micro_usd} > {budget_cap_micro_usd} micro-usd"
+        )
+        self.action_id = action_id
+        self.actual_cost_micro_usd = actual_cost_micro_usd
+        self.budget_cap_micro_usd = budget_cap_micro_usd
+
+
 class CuspClient:
     """Entry point for creating governed SDK runs."""
 
@@ -145,6 +158,7 @@ class CuspRun:
         estimated_cost_micro_usd: int,
         data_classification: str = "internal",
         summary: str = "",
+        idempotency_key: str | None = None,
     ) -> tuple[ActionRequest, Decision]:
         if self.run.state is not RunState.RUNNING:
             raise GovernanceBlocked(
@@ -160,14 +174,17 @@ class CuspRun:
             action_type=action_type,
             provider_profile=provider_profile,
             estimated_cost_micro_usd=estimated_cost_micro_usd,
-            idempotency_key=f"{self.run.run_id}:{self._sequence}:{secrets.token_hex(8)}",
+            idempotency_key=idempotency_key
+            or f"{self.run.run_id}:{self._sequence}:{secrets.token_hex(8)}",
             data_classification=data_classification,
             summary=summary,
         )
         decision = await self._transport.preflight(action)
+        if decision.action_id != action.action_id:
+            action = replace(action, action_id=decision.action_id)
         self._actions[action.action_id] = action
         self._decisions[action.action_id] = decision
-        if decision.verdict in {DecisionVerdict.PAUSE, DecisionVerdict.ESCALATE}:
+        if decision.verdict in {DecisionVerdict.PAUSE, DecisionVerdict.ESCALATE} and decision.reason_code != "budget_cap_exceeded":
             self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.PAUSED, self.run.metadata)
         elif decision.verdict is DecisionVerdict.KILL:
             self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.TERMINATED, self.run.metadata)
@@ -208,9 +225,13 @@ class CuspRun:
             if response.usage.provider_cost_micro_usd is not None
             else response.usage.virtual_cost_micro_usd
         )
-        await self._transport.report_completion(
-            CompletionReport(action.action_id, "completed", actual_cost, response.usage)
-        )
+        try:
+            await self._transport.report_completion(
+                CompletionReport(action.action_id, "completed", actual_cost, response.usage)
+            )
+        except BudgetOverrun:
+            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.FAILED, self.run.metadata)
+            raise
         return response
 
     async def report_completion(self, report: CompletionReport) -> None:
@@ -218,7 +239,11 @@ class CuspRun:
             raise ValueError("completion references an unknown action")
         if report.actual_cost_micro_usd < 0:
             raise ValueError("actual_cost_micro_usd cannot be negative")
-        await self._transport.report_completion(report)
+        try:
+            await self._transport.report_completion(report)
+        except BudgetOverrun:
+            self.run = Run(self.run.run_id, self.run.budget_cap_micro_usd, RunState.FAILED, self.run.metadata)
+            raise
 
     async def poll_control(self) -> ControlCommand:
         command = await self._transport.poll_control(self.run.run_id)
@@ -252,10 +277,15 @@ class InMemoryGatewayTransport:
 
     def __init__(self) -> None:
         self.runs: dict[str, Run] = {}
-        self.actions: dict[str, tuple[ActionRequest, bool]] = {}
+        self.actions: dict[str, ActionRequest] = {}
+        self.reservations: dict[str, int] = {}
+        self.completions: dict[str, CompletionReport] = {}
+        self.decisions: dict[str, Decision] = {}
+        self.idempotency: dict[str, tuple[ActionRequest, Decision]] = {}
         self.spent: dict[str, int] = {}
         self.reserved: dict[str, int] = {}
         self.controls: dict[str, ControlCommand] = {}
+        self._lock = asyncio.Lock()
 
     async def create_run(self, budget_cap_micro_usd: int, metadata: dict[str, str]) -> Run:
         run = Run(str(uuid.uuid4()), budget_cap_micro_usd, metadata=metadata)
@@ -266,27 +296,72 @@ class InMemoryGatewayTransport:
         return run
 
     async def preflight(self, action: ActionRequest) -> Decision:
-        run = self.runs[action.run_id]
-        if run.state is not RunState.RUNNING:
-            return Decision(action.action_id, DecisionVerdict.PAUSE, f"run_{run.state.value}")
-        if (
-            self.spent[action.run_id]
-            + self.reserved[action.run_id]
-            + action.estimated_cost_micro_usd
-            > run.budget_cap_micro_usd
-        ):
-            return Decision(action.action_id, DecisionVerdict.PAUSE, "budget_cap_exceeded")
-        self.reserved[action.run_id] += action.estimated_cost_micro_usd
-        self.actions[action.action_id] = (action, False)
-        return Decision(action.action_id, DecisionVerdict.ALLOW, "policy_allow", action.provider_profile)
+        async with self._lock:
+            existing = self.idempotency.get(action.idempotency_key)
+            if existing is not None:
+                original_action, original_decision = existing
+                if (
+                    original_action.run_id != action.run_id
+                    or original_action.action_type != action.action_type
+                    or original_action.provider_profile != action.provider_profile
+                    or original_action.estimated_cost_micro_usd != action.estimated_cost_micro_usd
+                    or original_action.data_classification != action.data_classification
+                    or original_action.summary != action.summary
+                ):
+                    raise ValueError("idempotency_key_conflict")
+                return original_decision
+
+            run = self.runs[action.run_id]
+            if run.state is not RunState.RUNNING:
+                return Decision(action.action_id, DecisionVerdict.PAUSE, f"run_{run.state.value}")
+            if (
+                self.spent[action.run_id]
+                + self.reserved[action.run_id]
+                + action.estimated_cost_micro_usd
+                > run.budget_cap_micro_usd
+            ):
+                # Rejected reservations are deliberately not entered into the
+                # idempotency map, so a later retry can succeed after release.
+                return Decision(action.action_id, DecisionVerdict.PAUSE, "budget_cap_exceeded")
+
+            decision = Decision(action.action_id, DecisionVerdict.ALLOW, "policy_allow", action.provider_profile)
+            self.reserved[action.run_id] += action.estimated_cost_micro_usd
+            self.reservations[action.action_id] = action.estimated_cost_micro_usd
+            self.actions[action.action_id] = action
+            self.decisions[action.action_id] = decision
+            self.idempotency[action.idempotency_key] = (action, decision)
+            return decision
 
     async def report_completion(self, report: CompletionReport) -> None:
-        action, completed = self.actions[report.action_id]
-        if completed:
-            return
-        self.reserved[action.run_id] -= action.estimated_cost_micro_usd
-        self.spent[action.run_id] += report.actual_cost_micro_usd
-        self.actions[report.action_id] = (action, True)
+        if report.actual_cost_micro_usd < 0:
+            raise ValueError("actual_cost_micro_usd cannot be negative")
+        async with self._lock:
+            if report.action_id in self.completions:
+                return
+            action = self.actions[report.action_id]
+            reservation = self.reservations.pop(report.action_id, 0)
+            if reservation > self.reserved[action.run_id]:
+                raise RuntimeError("reservation_invariant_violation")
+            self.reserved[action.run_id] -= reservation
+            self.spent[action.run_id] += report.actual_cost_micro_usd
+            self.completions[report.action_id] = report
+            if self.spent[action.run_id] > self.runs[action.run_id].budget_cap_micro_usd:
+                self.completions[report.action_id] = replace(
+                    report,
+                    status="overrun",
+                    error_code="budget_overrun",
+                )
+                self.runs[action.run_id] = Run(
+                    action.run_id,
+                    self.runs[action.run_id].budget_cap_micro_usd,
+                    RunState.FAILED,
+                    self.runs[action.run_id].metadata,
+                )
+                raise BudgetOverrun(
+                    report.action_id,
+                    self.spent[action.run_id],
+                    self.runs[action.run_id].budget_cap_micro_usd,
+                )
 
     async def poll_control(self, run_id: str) -> ControlCommand:
         command = self.controls[run_id]

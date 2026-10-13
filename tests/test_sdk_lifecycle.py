@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Self
 from unittest.mock import patch
 
 import pytest
 from cusp import (
+    ActionRequest,
+    BudgetOverrun,
+    CompletionReport,
     ControlAction,
     ControlCommand,
     CuspClient,
@@ -69,6 +73,7 @@ async def test_budget_pause_cannot_invoke_provider() -> None:
         estimated_cost_micro_usd=1,
     )
     assert decision.reason_code == "budget_cap_exceeded"
+    assert run.run.state is RunState.RUNNING
     with pytest.raises(GovernanceBlocked):
         await run.invoke(action, DeterministicFakeAdapter(), prompt="x", model="deterministic")
 
@@ -83,6 +88,89 @@ async def test_control_poll_applies_pause_and_terminate() -> None:
     transport.controls[run.run.run_id] = ControlCommand(ControlAction.TERMINATE)
     assert (await run.poll_control()).action is ControlAction.TERMINATE
     assert run.run.state is RunState.TERMINATED
+
+
+@pytest.mark.asyncio
+async def test_duplicate_preflight_returns_original_decision_and_reserves_once() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=10)
+    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 6, "idem-1")
+
+    first = await transport.preflight(action)
+    duplicate = await transport.preflight(action)
+
+    assert duplicate == first
+    assert len(transport.idempotency) == 1
+    assert transport.reserved[run.run.run_id] == 6
+
+
+@pytest.mark.asyncio
+async def test_rejected_preflight_key_can_retry_after_budget_release() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=5)
+    accepted = ActionRequest("accepted", run.run.run_id, 1, "model_call", "fake", 5, "accepted")
+    rejected = ActionRequest("rejected", run.run.run_id, 2, "model_call", "fake", 5, "retryable")
+
+    assert (await transport.preflight(accepted)).verdict.value == "allow"
+    assert (await transport.preflight(rejected)).reason_code == "budget_cap_exceeded"
+    await transport.report_completion(CompletionReport("accepted", "completed", 0))
+    retried = await transport.preflight(rejected)
+
+    assert retried.verdict.value == "allow"
+    assert transport.reserved[run.run.run_id] == 5
+    assert "retryable" in transport.idempotency
+
+
+@pytest.mark.asyncio
+async def test_concurrent_preflight_never_exceeds_budget() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=3)
+    actions = [
+        ActionRequest(f"action-{index}", run.run.run_id, index, "model_call", "fake", 1, f"idem-{index}")
+        for index in range(8)
+    ]
+    decisions = await asyncio.gather(*(transport.preflight(action) for action in actions))
+
+    assert sum(decision.verdict.value == "allow" for decision in decisions) == 3
+    assert transport.reserved[run.run.run_id] == 3
+    for action, decision in zip(actions, decisions, strict=True):
+        if decision.verdict.value == "allow":
+            await transport.report_completion(CompletionReport(action.action_id, "completed", 1))
+    assert transport.reserved[run.run.run_id] == 0
+    assert transport.reserved[run.run.run_id] >= 0
+
+
+@pytest.mark.asyncio
+async def test_duplicate_completion_releases_reservation_only_once() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=10)
+    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 4, "idem-1")
+    await transport.preflight(action)
+    report = CompletionReport(action.action_id, "completed", 3)
+
+    await transport.report_completion(report)
+    await transport.report_completion(report)
+
+    assert transport.reserved[run.run.run_id] == 0
+    assert transport.spent[run.run.run_id] == 3
+
+
+@pytest.mark.asyncio
+async def test_actual_cost_overrun_is_reconciled_and_fails_run() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=5)
+    action = ActionRequest("action-1", run.run.run_id, 1, "model_call", "fake", 2, "idem-1")
+    await transport.preflight(action)
+
+    report = CompletionReport(action.action_id, "completed", 8)
+    with pytest.raises(BudgetOverrun):
+        await transport.report_completion(report)
+    await transport.report_completion(report)
+
+    assert transport.spent[run.run.run_id] == 8
+    assert transport.reserved[run.run.run_id] == 0
+    assert transport.runs[run.run.run_id].state is RunState.FAILED
+    assert transport.completions[action.action_id].status == "overrun"
 
 
 class FakeHTTPResponse:

@@ -3,6 +3,7 @@
 from .http import GatewayTransportError, HttpGatewayTransport
 from .sdk import (
     ActionRequest,
+    BudgetOverrun,
     CompletionReport,
     ControlAction,
     ControlCommand,
@@ -18,6 +19,7 @@ from .sdk import (
 
 __all__ = [
     "ActionRequest",
+    "BudgetOverrun",
     "CompletionReport",
     "ControlAction",
     "ControlCommand",
