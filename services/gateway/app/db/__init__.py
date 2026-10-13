@@ -26,6 +26,7 @@ def _get_engine():
         max_overflow=5,
     )
 
+get_engine = _get_engine
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Return an async session factory bound to the engine."""
