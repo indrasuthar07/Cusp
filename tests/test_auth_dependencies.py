@@ -52,8 +52,7 @@ def _make_mock_request(headers: dict[str, str] | None = None) -> Request:
     return Request(scope)
 
 
-# ── 1. Bearer token extraction ──────────────────────────────────────────
-
+# 1. Bearer token extraction 
 def test_extract_bearer_token_success():
     req = _make_mock_request({"Authorization": "Bearer cusp_secret_token_123"})
     assert _extract_bearer_token(req) == "cusp_secret_token_123"
@@ -74,8 +73,7 @@ def test_extract_bearer_token_whitespace():
     assert _extract_bearer_token(req) == "cusp_token_with_spaces"
 
 
-# ── 2. get_current_agent dependency ─────────────────────────────────────
-
+# 2. get_current_agent dependency 
 @pytest.mark.asyncio
 async def test_get_current_agent_missing_header():
     req = _make_mock_request({})
@@ -141,8 +139,7 @@ async def test_get_current_agent_success():
         assert identity.scopes == {"actions": ["read", "write"]}
 
 
-# ── 3. get_current_user dependency ──────────────────────────────────────
-
+# 3. get_current_user dependency
 @pytest.mark.asyncio
 async def test_get_current_user_missing_header():
     req = _make_mock_request({})
@@ -215,8 +212,7 @@ async def test_get_current_user_success():
     assert user_identity.role == MembershipRole.owner
 
 
-# ── 4. require_role guard ───────────────────────────────────────────────
-
+# 4. require_role guard 
 @pytest.mark.asyncio
 async def test_require_role_allowed():
     guard = require_role(MembershipRole.owner, MembershipRole.admin)
@@ -254,8 +250,7 @@ async def test_require_role_denied():
     assert "Requires one of roles" in exc_info.value.detail
 
 
-# ── 5. Schemas validation ───────────────────────────────────────────────
-
+# 5. Schemas validation 
 def test_create_token_schemas():
     agent_id = uuid.uuid4()
     req = CreateTokenRequest(agent_public_id=agent_id, label="CI Runner")
@@ -275,8 +270,7 @@ def test_create_token_schemas():
     assert resp.raw_token == "cusp_raw123"
 
 
-# ── 6. App route registration ───────────────────────────────────────────
-
+# 6. App route registration 
 def test_routes_registered_in_app():
     openapi_schema = app.openapi()
     paths = set(openapi_schema["paths"].keys())

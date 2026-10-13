@@ -32,8 +32,7 @@ from app.events.schemas import (
 )
 
 
-# ── 1. Envelope serialization & round-trip ──────────────────────────────
-
+# 1. Envelope serialization & round-trip 
 def test_cusp_event_round_trip():
     org_id = 42
     session_id = 101
@@ -96,8 +95,7 @@ def test_cusp_event_from_raw_bytes():
     assert event.payload == {"tokens": 1500, "cost": 300}
 
 
-# ── 2. Specialized Payloads ─────────────────────────────────────────────
-
+# 2. Specialized Payloads 
 def test_specialized_payload_models():
     session_payload = SessionEventPayload(
         session_public_id="sess-001",
@@ -127,8 +125,7 @@ def test_specialized_payload_models():
     assert audit_payload.action == "policy.created"
 
 
-# ── 3. EventPublisher unit tests ────────────────────────────────────────
-
+# 3. EventPublisher unit tests 
 @pytest.mark.asyncio
 async def test_publisher_xadd_success():
     mock_redis = AsyncMock()

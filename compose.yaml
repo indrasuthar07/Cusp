@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
@@ -34,8 +32,13 @@ services:
       context: .
       dockerfile: services/gateway/Dockerfile
     environment:
-      - DATABASE_URL=postgresql://cusp:cusp_dev_only@postgres:5432/cusp
+      - CUSP_ENV=development
+      - DATABASE_URL=postgresql+asyncpg://cusp:cusp_dev_only@postgres:5432/cusp
       - REDIS_URL=redis://redis:6379/0
+      - CUSP_SESSION_SECRET=local-development-session-secret
+      - CUSP_TOKEN_PEPPER=local-development-token-pepper
+      - CUSP_PRICING_CATALOG_PATH=/app/docs/pricing.json
+      - CUSP_HOSTED_EGRESS_ALLOWED=false
     ports:
       - "8000:8000"
     depends_on:
@@ -49,8 +52,10 @@ services:
       context: .
       dockerfile: services/worker/Dockerfile
     environment:
-      - DATABASE_URL=postgresql://cusp:cusp_dev_only@postgres:5432/cusp
+      - CUSP_ENV=development
+      - DATABASE_URL=postgresql+asyncpg://cusp:cusp_dev_only@postgres:5432/cusp
       - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
     depends_on:
       postgres:
         condition: service_healthy

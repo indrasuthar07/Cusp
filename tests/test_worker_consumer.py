@@ -24,8 +24,7 @@ from services.worker.app.events import CuspEvent, CuspEventType
 from services.worker.app.models import AuditEvent
 
 
-# ── 1. Consumer Group Creation ──────────────────────────────────────────
-
+# 1. Consumer Group Creation 
 @pytest.mark.asyncio
 async def test_ensure_consumer_group_creates_stream():
     mock_redis = AsyncMock()
@@ -62,8 +61,7 @@ async def test_ensure_consumer_group_busygroup_handled():
     await consumer.ensure_consumer_group()
 
 
-# ── 2. Audit Event Database Persistence ─────────────────────────────────
-
+# 2. Audit Event Database Persistence 
 @pytest.mark.asyncio
 async def test_handle_event_persists_to_audit_events():
     mock_session = AsyncMock()
@@ -90,8 +88,7 @@ async def test_handle_event_persists_to_audit_events():
     assert saved_record.payload == {"action": "run_command", "status": "approved"}
 
 
-# ── 3. Batch Consumption & Message ACKs ─────────────────────────────────
-
+# 3. Batch Consumption & Message ACKs 
 @pytest.mark.asyncio
 async def test_consume_batch_success_and_ack():
     mock_redis = AsyncMock()
@@ -135,8 +132,7 @@ async def test_consume_batch_success_and_ack():
     )
 
 
-# ── 4. Retry Backoff & DLQ on Poison Pills ──────────────────────────────
-
+# 4. Retry Backoff & DLQ on Poison Pills 
 @pytest.mark.asyncio
 async def test_consume_batch_retries_and_dlq():
     mock_redis = AsyncMock()
@@ -177,8 +173,7 @@ async def test_consume_batch_retries_and_dlq():
     )
 
 
-# ── 5. Clean Shutdown ───────────────────────────────────────────────────
-
+# 5. Clean Shutdown 
 def test_consumer_stop():
     consumer = WorkerConsumer()
     consumer.is_running = True
