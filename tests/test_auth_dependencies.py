@@ -27,6 +27,7 @@ from app.auth.dependencies import (
     get_current_user,
     require_role,
 )
+from app.auth.oidc import OIDCClaims
 from app.auth.schemas import (
     AgentInfoResponse,
     CreateTokenRequest,
@@ -149,31 +150,37 @@ async def test_get_current_user_missing_header():
         await get_current_user(req, db)
 
     assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Missing X-Cusp-User-Id header" in exc_info.value.detail
+    assert "Missing OIDC identity token" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_invalid_int():
-    req = _make_mock_request({"X-Cusp-User-Id": "not-a-number"})
+async def test_get_current_user_legacy_user_header_is_rejected():
+    req = _make_mock_request({"X-Cusp-User-Id": "1"})
     db = AsyncMock()
 
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(req, db)
 
-    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert "must be an integer" in exc_info.value.detail
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.asyncio
 async def test_get_current_user_no_membership():
-    req = _make_mock_request({"X-Cusp-User-Id": "42"})
+    req = _make_mock_request({"Authorization": "Bearer oidc-token"})
     db = AsyncMock()
     exec_result = MagicMock()
-    exec_result.scalars.return_value.first.return_value = None
+    exec_result.scalars.return_value.all.return_value = []
     db.execute.return_value = exec_result
 
-    with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(req, db)
+    with patch("app.auth.dependencies.get_settings") as settings, patch(
+        "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
+    ) as verify:
+        settings.return_value.oidc_issuer_url = "https://issuer.example"
+        settings.return_value.oidc_jwks_url = "https://issuer.example/jwks"
+        settings.return_value.oidc_audience = "cusp-dashboard"
+        verify.return_value = OIDCClaims("subject-42", "u@example.com", "User")
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(req, db)
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert "no organization membership" in exc_info.value.detail
@@ -181,7 +188,7 @@ async def test_get_current_user_no_membership():
 
 @pytest.mark.asyncio
 async def test_get_current_user_success():
-    req = _make_mock_request({"X-Cusp-User-Id": "1"})
+    req = _make_mock_request({"Cookie": "cusp_oidc_id_token=oidc-token"})
     db = AsyncMock()
 
     user_obj = MagicMock()
@@ -200,10 +207,18 @@ async def test_get_current_user_success():
     membership_obj.role = MembershipRole.owner
 
     exec_result = MagicMock()
-    exec_result.scalars.return_value.first.return_value = membership_obj
+    exec_result.scalars.return_value.all.return_value = [membership_obj]
     db.execute.return_value = exec_result
 
-    user_identity = await get_current_user(req, db)
+    with patch("app.auth.dependencies.get_settings") as settings, patch(
+        "app.auth.dependencies.verify_oidc_token", new_callable=AsyncMock
+    ) as verify:
+        settings.return_value.oidc_issuer_url = "https://issuer.example"
+        settings.return_value.oidc_jwks_url = "https://issuer.example/jwks"
+        settings.return_value.oidc_audience = "cusp-dashboard"
+        verify.return_value = OIDCClaims("subject-1", "admin@example.com", "Admin User")
+        user_obj.oidc_subject = "subject-1"
+        user_identity = await get_current_user(req, db)
 
     assert isinstance(user_identity, UserIdentity)
     assert user_identity.user_id == 1

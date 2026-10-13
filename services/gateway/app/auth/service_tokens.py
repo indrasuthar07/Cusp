@@ -94,6 +94,9 @@ async def validate_service_token(
     """
     settings = get_settings()
 
+    if not raw_token.startswith(TOKEN_PREFIX):
+        return None
+
     # Re-hash the presented token with the same pepper
     token_hash = _hash_token(raw_token, settings.cusp_token_pepper.get_secret_value())
 
@@ -135,12 +138,19 @@ async def validate_service_token(
 async def revoke_service_token(
     db: AsyncSession,
     token_public_id: uuid.UUID,
+    *,
+    org_id: int,
 ) -> bool:
     """
     Revoke a service token by its public UUID.
-    Returns True if a token was found and revoked, False otherwise.
+    Returns True if a token was found in the requested organization and revoked.
     """
-    stmt = select(ServiceToken).where(ServiceToken.public_id == token_public_id)
+    stmt = (
+        select(ServiceToken)
+        .join(AgentRegistration)
+        .where(ServiceToken.public_id == token_public_id)
+    )
+    stmt = stmt.where(AgentRegistration.org_id == org_id)
     result = await db.execute(stmt)
     token_row = result.scalar_one_or_none()
 

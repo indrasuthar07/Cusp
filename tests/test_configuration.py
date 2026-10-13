@@ -59,6 +59,9 @@ def test_production_requires_strong_secrets_and_allowlist(tmp_path: Path) -> Non
             redis_url="redis://redis:6379/0",
             cusp_mcp_upstream_allowlist="filesystem",
             cusp_pricing_catalog_path=catalog_path(tmp_path).absolute(),
+            oidc_issuer_url="https://issuer.example",
+            oidc_audience="cusp-dashboard",
+            oidc_jwks_url="https://issuer.example/.well-known/jwks.json",
         )
     )
     assert settings.cusp_env.value == "production"

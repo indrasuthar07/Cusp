@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     cusp_token_pepper: SecretStr = Field(min_length=8)
     cusp_log_level: str = "INFO"
 
+    # Dashboard authentication is always OIDC; there is no user-ID header fallback.
+    oidc_issuer_url: AnyHttpUrl | None = None
+    oidc_audience: str = ""
+    oidc_jwks_url: AnyHttpUrl | None = None
+
     # Provider keys remain masked in model representations.
     ollama_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434")
     ollama_api_key: SecretStr = SecretStr("")
@@ -139,6 +144,8 @@ class Settings(BaseSettings):
                 raise ValueError("CUSP_MCP_UPSTREAM_ALLOWLIST is required in production")
             if not self.cusp_pricing_catalog_path.is_absolute():
                 raise ValueError("production pricing catalogue path must be absolute")
+            if self.oidc_issuer_url is None or not self.oidc_audience.strip() or self.oidc_jwks_url is None:
+                raise ValueError("production dashboard authentication requires OIDC issuer, audience, and JWKS URL")
 
         return self
 

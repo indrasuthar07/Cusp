@@ -181,7 +181,7 @@ async def revoke_token(
             detail="Token not found in your organization.",
         )
 
-    revoked = await revoke_service_token(db, token_public_id)
+    revoked = await revoke_service_token(db, token_public_id, org_id=user.org_id)
     await db.commit()
 
     # Emit audit event to Redis Streams

@@ -14,10 +14,21 @@ import uuid
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.oidc import OIDCVerificationError, verify_oidc_token
+from app.config.settings import get_settings
 from app.db import get_db
-from app.db.models import AgentRegistration, MembershipRole, Organization, ServiceToken, User
+from app.db.models import (
+    AgentRegistration,
+    Membership,
+    MembershipRole,
+    Organization,
+    ServiceToken,
+    User,
+)
 from app.auth.service_tokens import validate_service_token
 
 
@@ -103,36 +114,44 @@ async def get_current_agent(
     )
 
 
-# User dependency (placeholder - will use OIDC in a later phase) 
+# User dependency
 async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> UserIdentity:
-    """
-    FastAPI dependency that resolves the dashboard user.
+    """Resolve a dashboard user from a verified OIDC ID token.
 
-    MVP: Reads X-Cusp-User-Id header (for local dev).
-    Production: Will validate OIDC id_token from cookie.
+    The token may be supplied as a secure-session cookie or an Authorization
+    bearer token. Organization membership is resolved from the database; no
+    request header or caller-selected organization is trusted.
     """
-    user_id_str = request.headers.get("X-Cusp-User-Id")
-    if not user_id_str:
+    raw_token = request.cookies.get("cusp_oidc_id_token") or _extract_bearer_token(request)
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-Cusp-User-Id header (MVP auth). "
-                   "In production this will be replaced by OIDC.",
+            detail="Missing OIDC identity token.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models import Membership
-
-    try:
-        uid = int(user_id_str)
-    except ValueError:
+    settings = get_settings()
+    if settings.oidc_issuer_url is None or settings.oidc_jwks_url is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Cusp-User-Id must be an integer.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC dashboard authentication is not configured.",
         )
+    try:
+        claims = await verify_oidc_token(
+            raw_token,
+            issuer=settings.oidc_issuer_url,
+            audience=settings.oidc_audience,
+            jwks_url=settings.oidc_jwks_url,
+        )
+    except OIDCVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid OIDC identity token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
 
     stmt = (
         select(Membership)
@@ -141,16 +160,35 @@ async def get_current_user(
             selectinload(Membership.organization),
         )
         .join(User)
-        .where(User.id == uid)
+        .join(Membership.organization)
+        .where(
+            User.oidc_subject == claims.subject,
+            Organization.is_disabled.is_(False),
+        )
     )
+    if claims.organization_id:
+        try:
+            organization_public_id = uuid.UUID(claims.organization_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid OIDC organization claim.",
+            ) from exc
+        stmt = stmt.where(Organization.public_id == organization_public_id)
     result = await db.execute(stmt)
-    membership = result.scalars().first()
+    memberships = result.scalars().all()
 
-    if membership is None:
+    if not memberships:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User has no organization membership.",
         )
+    if len(memberships) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OIDC identity has multiple organizations; a trusted organization claim is required.",
+        )
+    membership = memberships[0]
 
     return UserIdentity(
         user_id=membership.user.id,
