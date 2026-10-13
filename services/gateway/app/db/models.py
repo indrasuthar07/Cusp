@@ -330,6 +330,9 @@ class ActionAttempt(Base):
     )
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     action_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider_profile: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    estimated_cost_micro_usd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    progress: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -399,6 +402,9 @@ class Decision(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
+    )
     session_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
     )
@@ -409,8 +415,13 @@ class Decision(Base):
         SAEnum(DecisionVerdict, name="decision_verdict"), nullable=False
     )
     reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    ev_score: Mapped[float | None] = mapped_column(nullable=True)
+    cost_provenance: Mapped[str] = mapped_column(String(32), default="unknown", nullable=False)
+    approved_profile: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    policy_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     loop_score: Mapped[float | None] = mapped_column(nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ev_score: Mapped[float | None] = mapped_column(nullable=True)
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     policy_version_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("policy_versions.id", ondelete="SET NULL"), nullable=True

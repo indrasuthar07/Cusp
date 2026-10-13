@@ -39,6 +39,8 @@ class HttpGatewayTransport:
         self.base_url = base_url.rstrip("/") + "/"
         self._service_token = service_token
         self.timeout_seconds = timeout_seconds
+        self._actions: dict[str, ActionRequest] = {}
+        self._decisions: dict[str, Decision] = {}
 
     async def create_run(self, budget_cap_micro_usd: int, metadata: dict[str, str]) -> Run:
         payload = await self._call(
@@ -55,7 +57,7 @@ class HttpGatewayTransport:
 
     async def preflight(self, action: ActionRequest) -> Decision:
         payload = await self._call("POST", "/api/v1/actions/preflight", _action_payload(action))
-        return Decision(
+        decision = Decision(
             action_id=str(payload.get("action_id", action.action_id)),
             verdict=DecisionVerdict(payload["verdict"]),
             reason_code=str(payload.get("reason_code", "unknown")),
@@ -63,9 +65,16 @@ class HttpGatewayTransport:
             policy_version=int(payload.get("policy_version", 1)),
             decision_token=payload.get("decision_token"),
         )
+        self._actions[decision.action_id] = action
+        self._decisions[decision.action_id] = decision
+        return decision
 
     async def report_completion(self, report: CompletionReport) -> None:
-        await self._call("POST", "/api/v1/actions/completion", _completion_payload(report))
+        action = self._actions.get(report.action_id)
+        decision = self._decisions.get(report.action_id)
+        if action is None or decision is None or not decision.decision_token:
+            raise GatewayTransportError("completion references an unknown or unsigned action")
+        await self._call("POST", "/api/v1/actions/completion", _completion_payload(report, action, decision))
 
     async def poll_control(self, run_id: str) -> ControlCommand:
         payload = await self._call("GET", f"/api/v1/runs/{run_id}/control")
@@ -116,13 +125,16 @@ def _action_payload(action: ActionRequest) -> dict[str, Any]:
     }
 
 
-def _completion_payload(report: CompletionReport) -> dict[str, Any]:
+def _completion_payload(report: CompletionReport, action: ActionRequest, decision: Decision) -> dict[str, Any]:
     usage = report.usage
     return {
         "schema_version": 1,
         "action_id": report.action_id,
         "status": report.status,
         "actual_cost_micro_usd": report.actual_cost_micro_usd,
+        "estimated_cost_micro_usd": action.estimated_cost_micro_usd,
+        "provider_profile": action.provider_profile,
+        "decision_token": decision.decision_token,
         "error_code": report.error_code,
         "usage": asdict(usage) if is_dataclass(usage) else usage,
     }

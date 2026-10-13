@@ -4,6 +4,7 @@ local run_key = KEYS[1]
 local idem_key = KEYS[2]
 local org_key = KEYS[3]
 local task_key = KEYS[4]
+local reservation_key = KEYS[5]
 
 local idem_val = ARGV[1]
 local est_cost = tonumber(ARGV[2])
@@ -11,13 +12,18 @@ local run_cap = tonumber(ARGV[3])
 local org_cap = tonumber(ARGV[4])
 local task_cap = tonumber(ARGV[5])
 local ts = ARGV[6]
+local action_id = ARGV[7]
 
--- 1. Check Idempotency
-if idem_val ~= "" then
-    local locked = redis.call("SET", idem_key, "1", "NX", "EX", 300)
-    if not locked then
-        return {err = "Idempotency conflict: Action already being processed or completed."}
-    end
+if not est_cost or est_cost < 0 or not run_cap or run_cap < 0 or not org_cap or org_cap < 0 then
+    return {err = "Invalid budget values."}
+end
+
+-- 1. Existing reservations are idempotent and return without charging twice.
+if redis.call("HGET", reservation_key, "status") == "reserved" then
+    return {ok = "duplicate"}
+end
+if idem_val ~= "" and redis.call("EXISTS", idem_key) == 1 then
+    return {ok = "duplicate"}
 end
 
 -- 2. Check Run State and Run Budget
@@ -52,7 +58,15 @@ if task_key ~= "" then
     redis.call("HINCRBY", task_key, "reserved", est_cost)
 end
 
--- 5. Commit Reservations
+-- 5. Commit idempotency and reservation only after every rejection check passes.
+if idem_val ~= "" then
+    local locked = redis.call("SET", idem_key, action_id, "NX", "EX", 300)
+    if not locked then
+        return {ok = "duplicate"}
+    end
+end
+redis.call("HSET", reservation_key, "status", "reserved", "estimated", est_cost, "action_id", action_id)
+redis.call("EXPIRE", reservation_key, 3600)
 redis.call("HINCRBY", run_key, "reserved", est_cost)
 redis.call("HINCRBY", org_key, "reserved", est_cost)
 redis.call("HSET", org_key, "updated_at", ts)
