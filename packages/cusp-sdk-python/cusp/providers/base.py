@@ -41,6 +41,9 @@ class ProviderRequest:
     tools: tuple[dict[str, Any], ...] = ()
     metadata: dict[str, str] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not self.model.strip():
+            raise ValueError("provider model must not be empty")
 
 @dataclass(frozen=True, slots=True)
 class Usage:
@@ -53,6 +56,15 @@ class Usage:
     cost_provenance: CostProvenance = CostProvenance.UNKNOWN
     latency_ms: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.input_tokens < 0 or self.output_tokens < 0:
+            raise ValueError("token counts cannot be negative")
+        if self.provider_cost_micro_usd is not None and self.provider_cost_micro_usd < 0:
+            raise ValueError("provider cost cannot be negative")
+        if self.virtual_cost_micro_usd < 0:
+            raise ValueError("virtual cost cannot be negative")
+        if self.latency_ms is not None and self.latency_ms < 0:
+            raise ValueError("latency cannot be negative")
 
 @dataclass(frozen=True, slots=True)
 class ProviderResponse:

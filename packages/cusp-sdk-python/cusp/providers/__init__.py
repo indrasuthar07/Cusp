@@ -10,12 +10,15 @@ from .base import (
     ProviderResponse,
     Usage,
 )
+from .ollama import OllamaAdapter, OllamaConfig
 
 __all__ = [
     "AdapterError",
     "AdapterHealth",
     "CapabilitySet",
     "CostProvenance",
+    "OllamaAdapter",
+    "OllamaConfig",
     "ProviderAdapter",
     "ProviderRequest",
     "ProviderResponse",

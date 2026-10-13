@@ -1,5 +1,5 @@
 """Deterministic offline provider adapter."""
 
-from .fake_adapter import DeterministicFakeAdapter
+from .fake_adapter import DeterministicFakeAdapter, FakeScenario
 
-__all__ = ["DeterministicFakeAdapter"]
+__all__ = ["DeterministicFakeAdapter", "FakeScenario"]

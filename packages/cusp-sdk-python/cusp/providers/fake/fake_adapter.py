@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
 
 from cusp.providers.base import (
+    AdapterError,
     AdapterHealth,
     CapabilitySet,
     CostProvenance,
@@ -12,14 +14,25 @@ from cusp.providers.base import (
 )
 
 
+class FakeScenario(StrEnum):
+    """Deterministic outcomes used by tests and offline demos."""
+
+    SUCCESS = "success"
+    NO_PROGRESS = "no_progress"
+    TRANSIENT_FAILURE = "transient_failure"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+
+
 class DeterministicFakeAdapter:
     """
     A fake provider adapter for testing, demos, and failure scenarios.
     Returns deterministic responses without requiring API keys.
     """
-    def __init__(self):
+    def __init__(self, scenario: FakeScenario | str = FakeScenario.SUCCESS):
         self.provider_kind = "fake"
         self.is_healthy = True
+        self.scenario = FakeScenario(scenario)
+        self.call_count = 0
         self.capabilities = CapabilitySet(
             streaming=False,
             tools=False,
@@ -35,8 +48,19 @@ class DeterministicFakeAdapter:
         return AdapterHealth(healthy=self.is_healthy, provider=self.provider_kind)
 
     def generate(self, request: ProviderRequest) -> ProviderResponse:
+        self.call_count += 1
+        if self.scenario is FakeScenario.QUOTA_EXHAUSTED:
+            raise AdapterError("provider_quota_exhausted", "fake quota exhausted")
+        if self.scenario is FakeScenario.TRANSIENT_FAILURE and self.call_count == 1:
+            raise AdapterError("provider_timeout", "fake transient failure", retryable=True)
+
+        content = (
+            "No progress was made."
+            if self.scenario is FakeScenario.NO_PROGRESS
+            else "This is a deterministic fake response."
+        )
         return ProviderResponse(
-            content="This is a deterministic fake response.",
+            content=content,
             usage=Usage(
                 input_tokens=10,
                 output_tokens=8,
