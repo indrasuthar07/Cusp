@@ -427,9 +427,11 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         Index("ix_audit_events_correlation", "correlation_id"),
+        UniqueConstraint("event_id", name="uq_audit_events_event_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     org_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )

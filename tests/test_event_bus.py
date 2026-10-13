@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.events.publisher import EventPublisher
 from app.events.schemas import (
     ActionPreflightPayload,
@@ -93,6 +92,24 @@ def test_cusp_event_from_raw_bytes():
     assert event.agent_id == 3
     assert event.correlation_id == "corr-abc-xyz"
     assert event.payload == {"tokens": 1500, "cost": 300}
+
+
+def test_event_serialization_redacts_sensitive_payload_fields():
+    event = CuspEvent(
+        event_type=CuspEventType.AUDIT_LOG,
+        org_id=1,
+        payload={
+            "prompt": "private prompt",
+            "api_key": "secret-key",
+            "nested": {"authorization": "Bearer private-token", "safe": "ok"},
+        },
+    )
+
+    serialized = json.loads(event.to_stream_entry()["payload"])
+    assert serialized["prompt"] == "[REDACTED]"
+    assert serialized["api_key"] == "[REDACTED]"
+    assert serialized["nested"]["authorization"] == "[REDACTED]"
+    assert serialized["nested"]["safe"] == "ok"
 
 
 # 2. Specialized Payloads 

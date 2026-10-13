@@ -164,6 +164,7 @@ async def test_consume_batch_retries_and_dlq():
     dlq_args, dlq_kwargs = mock_redis.xadd.call_args
     assert dlq_args[0] == settings.dead_letter_stream
     assert dlq_args[1]["failed_msg_id"] == "poison-msg-1"
+    assert "invalid" in dlq_args[1]["raw_fields"]
 
     # Original stream must be ACKed so consumer group doesn't deadlock
     mock_redis.xack.assert_called_once_with(
@@ -179,3 +180,62 @@ def test_consumer_stop():
     consumer.is_running = True
     consumer.stop()
     assert consumer.is_running is False
+
+@pytest.mark.asyncio
+async def test_pending_messages_are_reclaimed_after_restart():
+    mock_redis = AsyncMock()
+    settings = WorkerSettings(claim_idle_ms=1234)
+    fields = CuspEvent(
+        event_type=CuspEventType.AUDIT_LOG,
+        org_id=1,
+        payload={"action": "replay"},
+    ).to_stream_entry()
+    mock_redis.xautoclaim.return_value = (b"0-0", [(b"9-0", fields)], [])
+    consumer = WorkerConsumer(redis_client=mock_redis, settings=settings)
+    consumer.process_message = AsyncMock()
+
+    assert await consumer.reclaim_pending() == 1
+    mock_redis.xautoclaim.assert_awaited_once_with(
+        settings.stream_name,
+        settings.consumer_group,
+        settings.consumer_name,
+        1234,
+        start_id="0-0",
+        count=settings.batch_size,
+    )
+    mock_redis.xack.assert_awaited_once_with(settings.stream_name, settings.consumer_group, "9-0")
+
+
+@pytest.mark.asyncio
+async def test_retry_attempts_survive_consumer_restart():
+    mock_redis = AsyncMock()
+    mock_redis.hincrby.side_effect = [1, 2]
+    settings = WorkerSettings()
+    first = WorkerConsumer(redis_client=mock_redis, settings=settings)
+    second = WorkerConsumer(redis_client=mock_redis, settings=settings)
+
+    assert await first._retry_attempt("restart-1") == 1
+    assert await second._retry_attempt("restart-1") == 2
+    assert mock_redis.hincrby.await_count == 2
+
+@pytest.mark.asyncio
+async def test_dlq_redacts_payload_and_replay_redacts_again():
+    mock_redis = AsyncMock()
+    settings = WorkerSettings(max_retries=1)
+    consumer = WorkerConsumer(redis_client=mock_redis, settings=settings)
+    fields = {
+        "event_id": "event-1",
+        "payload": json.dumps({"prompt": "do not store", "safe": "ok"}),
+    }
+
+    await consumer.send_to_dlq("bad-1", fields, "token=super-secret")
+    dlq_entry = mock_redis.xadd.call_args.args[1]
+    assert "do not store" not in dlq_entry["raw_fields"]
+    assert "super-secret" not in dlq_entry["error"]
+
+    mock_redis.xrange.return_value = [(b"dlq-1", dlq_entry)]
+    assert await consumer.replay_dlq(remove=True) == 1
+    replayed_fields = mock_redis.xadd.call_args_list[-1].args[1]
+    assert replayed_fields["event_id"] == "event-1"
+    assert "do not store" not in replayed_fields["payload"]
+    mock_redis.xdel.assert_awaited_once_with(settings.dead_letter_stream, b"dlq-1")

@@ -7,7 +7,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, Integer, String, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -21,9 +29,11 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         Index("ix_audit_events_correlation", "correlation_id"),
+        UniqueConstraint("event_id", name="uq_audit_events_event_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     org_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     correlation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False

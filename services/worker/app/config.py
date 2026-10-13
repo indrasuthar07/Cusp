@@ -48,6 +48,8 @@ class WorkerSettings(BaseSettings):
     batch_size: int = 10
     block_time_ms: int = 2000
     max_retries: int = 3
+    claim_idle_ms: int = 30_000
+    retry_hash: str = "cusp:v1:events:retries"
     log_level: str = "INFO"
 
     @model_validator(mode="after")
@@ -58,6 +60,10 @@ class WorkerSettings(BaseSettings):
             raise ValueError("BLOCK_TIME_MS cannot be negative")
         if self.max_retries < 1:
             raise ValueError("MAX_RETRIES must be at least 1")
+        if self.claim_idle_ms < 0:
+            raise ValueError("CLAIM_IDLE_MS cannot be negative")
+        if not self.retry_hash.strip():
+            raise ValueError("RETRY_HASH cannot be empty")
         if self.log_level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
         if self.cusp_env is WorkerEnvironment.production and (

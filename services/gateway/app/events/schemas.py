@@ -13,16 +13,44 @@ or sensitive API keys must NEVER be placed in event payloads.
 from __future__ import annotations
 
 import enum
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 EVENTS_STREAM_NAME: str = "cusp:v1:events"
 DEAD_LETTER_STREAM_NAME: str = "cusp:v1:events:dead"
 DEFAULT_CONSUMER_GROUP: str = "cusp-workers"
+REDACTED_VALUE = "[REDACTED]"
+_SENSITIVE_KEY = re.compile(
+    r"(?:secret|token|password|api[_-]?key|authorization|credential|private[_-]?key|"
+    r"prompt|tool[_-]?output|source[_-]?code|raw[_-]?input|cookie)",
+    re.IGNORECASE,
+)
+
+
+def redact_text(value: str) -> str:
+    """Remove common credential/token forms from diagnostic text."""
+    return re.sub(
+        r"(?i)(bearer\s+|(?:api[_-]?key|token|password|secret)\s*[=:]\s*)[^\s,;]+",
+        r"\1" + REDACTED_VALUE,
+        value,
+    )
+
+
+def redact_payload(value: Any, *, key: str = "") -> Any:
+    """Recursively redact sensitive event fields before serialization."""
+    if _SENSITIVE_KEY.search(key):
+        return REDACTED_VALUE
+    if isinstance(value, dict):
+        return {str(child_key): redact_payload(child, key=str(child_key)) for child_key, child in value.items()}
+    if isinstance(value, list):
+        return [redact_payload(child, key=key) for child in value]
+    if isinstance(value, str):
+        return redact_text(value)
+    return value
 
 
 class CuspEventType(str, enum.Enum):
@@ -78,7 +106,7 @@ class CuspEvent(BaseModel):
             "agent_id": str(self.agent_id) if self.agent_id is not None else "",
             "correlation_id": self.correlation_id,
             "timestamp": self.timestamp.isoformat(),
-            "payload": json.dumps(self.payload, default=_json_serial),
+            "payload": json.dumps(redact_payload(self.payload), default=_json_serial),
         }
 
     @classmethod
