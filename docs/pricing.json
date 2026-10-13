@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "unit": "micro_usd",
+  "updated_at": "2026-10-13",
+  "profiles": {
+    "fake": {
+      "provider": "fake",
+      "model": "deterministic",
+      "input_micro_usd_per_1k_tokens": 0,
+      "output_micro_usd_per_1k_tokens": 0,
+      "cost_source": "virtual"
+    },
+    "ollama": {
+      "provider": "ollama",
+      "model": "configured-local-model",
+      "input_micro_usd_per_1k_tokens": 0,
+      "output_micro_usd_per_1k_tokens": 0,
+      "cost_source": "virtual"
+    },
+    "gemini": {
+      "provider": "gemini",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    },
+    "groq": {
+      "provider": "groq",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    },
+    "huggingface": {
+      "provider": "huggingface",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    },
+    "openai": {
+      "provider": "openai",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "model": "configured-model",
+      "input_micro_usd_per_1k_tokens": null,
+      "output_micro_usd_per_1k_tokens": null,
+      "cost_source": "provider_reported",
+      "requires_provider_catalog": true
+    }
+  }
+}

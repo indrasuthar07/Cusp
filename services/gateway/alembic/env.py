@@ -10,13 +10,16 @@ from sqlalchemy import engine_from_config, pool
 # Make gateway app importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.db.models import Base  # noqa: E402
+from app.db.models import Base
 
 config = context.config
 
 # Override sqlalchemy.url from environment if available
 db_url = os.environ.get("DATABASE_URL")
 if db_url:
+    # Alembic's synchronous engine needs psycopg2 even though the gateway
+    # uses asyncpg at runtime
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
     config.set_main_option("sqlalchemy.url", db_url)
 
 if config.config_file_name is not None:

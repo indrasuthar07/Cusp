@@ -21,17 +21,15 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from app.config.settings import get_settings
+from app.db.models import AgentRegistration, ServiceToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config.settings import get_settings
-from app.db.models import AgentRegistration, ServiceToken
-
-
-# Token prefix for easy identification 
+# Token prefix for easy identification
 TOKEN_PREFIX = "cusp_"
 RAW_TOKEN_BYTES = 32  # 256-bit entropy
 
@@ -66,7 +64,7 @@ async def create_service_token(
     raw_token = TOKEN_PREFIX + secrets.token_hex(RAW_TOKEN_BYTES)
 
     # Hash with the server pepper - only the hash is stored
-    token_hash = _hash_token(raw_token, settings.cusp_token_pepper)
+    token_hash = _hash_token(raw_token, settings.cusp_token_pepper.get_secret_value())
 
     token_row = ServiceToken(
         public_id=uuid.uuid4(),
@@ -78,7 +76,7 @@ async def create_service_token(
         expires_at=expires_at,
     )
     db.add(token_row)
-    await db.flush()     
+    await db.flush()
     await db.refresh(token_row)
 
     return token_row, raw_token
@@ -96,14 +94,18 @@ async def validate_service_token(
     """
     settings = get_settings()
 
+    if not raw_token.startswith(TOKEN_PREFIX):
+        return None
+
     # Re-hash the presented token with the same pepper
-    token_hash = _hash_token(raw_token, settings.cusp_token_pepper)
+    token_hash = _hash_token(raw_token, settings.cusp_token_pepper.get_secret_value())
 
     stmt = (
         select(ServiceToken)
         .options(
-            selectinload(ServiceToken.agent)
-            .selectinload(AgentRegistration.organization)
+            selectinload(ServiceToken.agent).selectinload(
+                AgentRegistration.organization
+            )
         )
         .where(ServiceToken.token_hash == token_hash)
     )
@@ -119,7 +121,7 @@ async def validate_service_token(
 
     # Check expiry
     if token_row.expires_at is not None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if token_row.expires_at < now:
             return None
 
@@ -137,12 +139,19 @@ async def validate_service_token(
 async def revoke_service_token(
     db: AsyncSession,
     token_public_id: uuid.UUID,
+    *,
+    org_id: int,
 ) -> bool:
     """
     Revoke a service token by its public UUID.
-    Returns True if a token was found and revoked, False otherwise.
+    Returns True if a token was found in the requested organization and revoked.
     """
-    stmt = select(ServiceToken).where(ServiceToken.public_id == token_public_id)
+    stmt = (
+        select(ServiceToken)
+        .join(AgentRegistration)
+        .where(ServiceToken.public_id == token_public_id)
+    )
+    stmt = stmt.where(AgentRegistration.org_id == org_id)
     result = await db.execute(stmt)
     token_row = result.scalar_one_or_none()
 

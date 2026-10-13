@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cusp.dev/contracts/v1/event.schema.json",
+  "title": "Cusp Redacted Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "organization_id", "occurred_at", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"enum": ["run.created", "run.paused", "run.completed", "action.preflighted", "action.executed", "telemetry.recorded", "audit.logged", "budget.exceeded"]},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "run_id": {"type": ["string", "null"], "format": "uuid"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {"type": "string", "maxLength": 100},
+        "verdict": {"enum": ["allow", "downgrade", "pause", "escalate", "kill"]},
+        "reason_code": {"type": "string", "maxLength": 128},
+        "provider": {"type": "string", "maxLength": 64},
+        "model": {"type": "string", "maxLength": 255},
+        "tokens_input": {"type": "integer", "minimum": 0},
+        "tokens_output": {"type": "integer", "minimum": 0},
+        "virtual_cost_micro_usd": {"type": "integer", "minimum": 0},
+        "provider_cost_micro_usd": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}

@@ -14,33 +14,30 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
-
 from app.events.publisher import EventPublisher
 from app.events.schemas import (
+    EVENTS_STREAM_NAME,
     ActionPreflightPayload,
     AuditLogPayload,
     CuspEvent,
     CuspEventType,
-    DEAD_LETTER_STREAM_NAME,
-    EVENTS_STREAM_NAME,
     SessionEventPayload,
     TelemetryPayload,
 )
 
 
-# ── 1. Envelope serialization & round-trip ──────────────────────────────
-
+# 1. Envelope serialization & round-trip
 def test_cusp_event_round_trip():
     org_id = 42
     session_id = 101
     agent_id = 7
     event_id = str(uuid.uuid4())
     correlation_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     event = CuspEvent(
         event_id=event_id,
@@ -96,8 +93,25 @@ def test_cusp_event_from_raw_bytes():
     assert event.payload == {"tokens": 1500, "cost": 300}
 
 
-# ── 2. Specialized Payloads ─────────────────────────────────────────────
+def test_event_serialization_redacts_sensitive_payload_fields():
+    event = CuspEvent(
+        event_type=CuspEventType.AUDIT_LOG,
+        org_id=1,
+        payload={
+            "prompt": "private prompt",
+            "api_key": "secret-key",
+            "nested": {"authorization": "Bearer private-token", "safe": "ok"},
+        },
+    )
 
+    serialized = json.loads(event.to_stream_entry()["payload"])
+    assert serialized["prompt"] == "[REDACTED]"
+    assert serialized["api_key"] == "[REDACTED]"
+    assert serialized["nested"]["authorization"] == "[REDACTED]"
+    assert serialized["nested"]["safe"] == "ok"
+
+
+# 2. Specialized Payloads
 def test_specialized_payload_models():
     session_payload = SessionEventPayload(
         session_public_id="sess-001",
@@ -127,8 +141,7 @@ def test_specialized_payload_models():
     assert audit_payload.action == "policy.created"
 
 
-# ── 3. EventPublisher unit tests ────────────────────────────────────────
-
+# 3. EventPublisher unit tests
 @pytest.mark.asyncio
 async def test_publisher_xadd_success():
     mock_redis = AsyncMock()

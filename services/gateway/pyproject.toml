@@ -12,6 +12,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "fastapi>=0.141.1",
     "psycopg2-binary>=2.9.0",
+    "PyJWT[crypto]>=2.10.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "redis>=8.1.0",

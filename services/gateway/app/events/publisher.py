@@ -8,18 +8,16 @@ cusp:v1:events Redis Stream with stream capping to prevent unbounded memory usag
 from __future__ import annotations
 
 import logging
-from typing import Any
 import uuid
 
 import redis.asyncio as aioredis
-
 from app.db.redis import get_redis_client
 from app.events.schemas import (
+    EVENTS_STREAM_NAME,
     ActionPreflightPayload,
     AuditLogPayload,
     CuspEvent,
     CuspEventType,
-    EVENTS_STREAM_NAME,
     SessionEventPayload,
     TelemetryPayload,
 )
@@ -74,7 +72,9 @@ class EventPublisher:
                 maxlen=self._max_stream_len,
                 approximate=True,
             )
-            msg_id_str = msg_id.decode("utf-8") if isinstance(msg_id, bytes) else str(msg_id)
+            msg_id_str = (
+                msg_id.decode("utf-8") if isinstance(msg_id, bytes) else str(msg_id)
+            )
             logger.debug(
                 "Published event %s [%s] to %s (msg_id=%s)",
                 event.event_id,
@@ -83,20 +83,18 @@ class EventPublisher:
                 msg_id_str,
             )
             return msg_id_str
-        except Exception as exc:
-            logger.error(
-                "Failed to publish event %s [%s] to stream %s: %s",
+        except Exception:
+            logger.exception(
+                "Failed to publish event %s [%s] to stream %s",
                 event.event_id,
                 event.event_type,
                 target_stream,
-                exc,
-                exc_info=True,
             )
             if strict:
                 raise
             return None
 
-    # Convenience helper methods 
+    # Convenience helper methods
 
     async def publish_session_event(
         self,

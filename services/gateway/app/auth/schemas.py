@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
-# Token creation 
+# Token creation
 class CreateTokenRequest(BaseModel):
     """Request body for POST /api/v1/auth/tokens."""
+
     agent_public_id: uuid.UUID = Field(
         description="Public UUID of the agent this token is for."
     )
@@ -33,6 +35,7 @@ class CreateTokenResponse(BaseModel):
     IMPORTANT: `raw_token` is returned exactly ONCE. It is never stored
     and cannot be retrieved again.
     """
+
     token_public_id: uuid.UUID
     raw_token: str = Field(
         description="The raw bearer token — copy it now, it will never be shown again."
@@ -42,9 +45,10 @@ class CreateTokenResponse(BaseModel):
     created_at: datetime
 
 
-# Token listing 
+# Token listing
 class TokenSummary(BaseModel):
     """A single token in a list response — never includes the raw token."""
+
     token_public_id: uuid.UUID
     agent_public_id: uuid.UUID
     agent_name: str
@@ -60,15 +64,16 @@ class TokenListResponse(BaseModel):
     count: int
 
 
-# Token revocation 
+# Token revocation
 class RevokeTokenResponse(BaseModel):
     token_public_id: uuid.UUID
     revoked: bool
 
 
-# Identity introspection 
+# Identity introspection
 class AgentInfoResponse(BaseModel):
     """Response for GET /api/v1/auth/me (agent)."""
+
     agent_public_id: uuid.UUID
     agent_name: str
     org_public_id: uuid.UUID
@@ -78,6 +83,7 @@ class AgentInfoResponse(BaseModel):
 
 class UserInfoResponse(BaseModel):
     """Response for GET /api/v1/auth/me (user)."""
+
     user_public_id: uuid.UUID
     email: str
     display_name: str

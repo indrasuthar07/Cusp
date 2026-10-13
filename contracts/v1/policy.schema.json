@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cusp.dev/contracts/v1/policy.schema.json",
+  "title": "Cusp Governance Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "version", "default_action", "budgets", "hosted_egress", "fail_safe"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "policy_id": {"type": "string", "format": "uuid"},
+    "version": {"type": "integer", "minimum": 1},
+    "default_action": {"enum": ["allow", "downgrade", "pause", "escalate", "kill"]},
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_cap_micro_usd", "organization_cap_micro_usd"],
+      "properties": {
+        "run_cap_micro_usd": {"type": "integer", "minimum": 0},
+        "organization_cap_micro_usd": {"type": "integer", "minimum": 0}
+      }
+    },
+    "hosted_egress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "acknowledgement_version", "allowed_data_classes"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "acknowledgement_version": {"type": ["string", "null"]},
+        "allowed_data_classes": {"type": "array", "items": {"enum": ["public", "internal", "confidential", "restricted"]}, "uniqueItems": true}
+      }
+    },
+    "fail_safe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["on_budget_check_failure", "on_provider_quota_failure", "on_policy_resolution_failure"],
+      "properties": {
+        "on_budget_check_failure": {"enum": ["pause", "escalate"]},
+        "on_provider_quota_failure": {"enum": ["pause", "downgrade", "escalate"]},
+        "on_policy_resolution_failure": {"enum": ["pause", "escalate"]}
+      }
+    },
+    "loop_detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exact_repeat_limit": {"type": "integer", "minimum": 1},
+        "semantic_similarity_threshold": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cusp.dev/contracts/v1/runtime-action.schema.json",
+  "title": "Cusp Runtime Action",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "action_id", "run_id", "sequence", "action_type", "provider_profile", "estimated_cost_micro_usd", "idempotency_key", "data_classification"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "action_id": {"type": "string", "format": "uuid"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "action_type": {"enum": ["model_call", "tool_call", "test_run", "file_change", "context_read"]},
+    "provider_profile": {"type": "string", "minLength": 1, "maxLength": 128},
+    "estimated_cost_micro_usd": {"type": "integer", "minimum": 0},
+    "idempotency_key": {"type": "string", "minLength": 16, "maxLength": 255},
+    "data_classification": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "summary": {"type": "string", "maxLength": 2000},
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "diff_bytes": {"type": "integer", "minimum": 0},
+        "tests_passed": {"type": "integer", "minimum": 0},
+        "tests_failed": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": "integer", "minimum": 0}
+      }
+    },
+    "metadata": {"type": "object", "additionalProperties": false}
+  }
+}

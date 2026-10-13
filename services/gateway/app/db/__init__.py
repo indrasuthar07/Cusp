@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from functools import lru_cache
-from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -17,6 +17,7 @@ def _build_async_url(dsn: str) -> str:
 def _get_engine():
     """Lazily create the async engine (only when first needed)."""
     from app.config.settings import get_settings
+
     settings = get_settings()
     async_url = _build_async_url(str(settings.database_url))
     return create_async_engine(
@@ -26,7 +27,9 @@ def _get_engine():
         max_overflow=5,
     )
 
+
 get_engine = _get_engine
+
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Return an async session factory bound to the engine."""

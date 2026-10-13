@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cusp.dev/contracts/v1/decision.schema.json",
+  "title": "Cusp Governance Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "action_id", "verdict", "reason_code", "cost_provenance", "policy_version", "expires_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "decision_id": {"type": "string", "format": "uuid"},
+    "action_id": {"type": "string", "format": "uuid"},
+    "verdict": {"enum": ["allow", "downgrade", "pause", "escalate", "kill"]},
+    "reason_code": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{1,127}$"},
+    "cost_provenance": {"enum": ["virtual", "provider_reported", "catalog_estimate", "unknown"]},
+    "policy_version": {"type": "integer", "minimum": 1},
+    "ev_score": {"type": ["number", "null"]},
+    "loop_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "approved_profile": {"type": ["string", "null"]},
+    "decision_token": {"type": ["string", "null"]},
+    "expires_at": {"type": "string", "format": "date-time"}
+  }
+}

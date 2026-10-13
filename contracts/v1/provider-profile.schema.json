@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cusp.dev/contracts/v1/provider-profile.schema.json",
+  "title": "Cusp Provider Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "provider", "model", "privacy_class", "route_group", "requires_hosted_egress_ack", "capabilities", "cost_policy"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "provider": {"enum": ["fake", "ollama", "gemini", "groq", "huggingface", "openai", "anthropic"]},
+    "model": {"type": "string", "minLength": 1, "maxLength": 255},
+    "privacy_class": {"enum": ["offline_private", "hosted_consent_required", "hosted_optional"]},
+    "route_group": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "requires_hosted_egress_ack": {"type": "boolean"},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["streaming", "tools", "structured_output", "usage_reporting"],
+      "properties": {
+        "streaming": {"type": "boolean"},
+        "tools": {"type": "boolean"},
+        "structured_output": {"type": "boolean"},
+        "usage_reporting": {"type": "boolean"}
+      }
+    },
+    "cost_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cost_source", "input_micro_usd_per_1k_tokens", "output_micro_usd_per_1k_tokens"],
+      "properties": {
+        "cost_source": {"enum": ["virtual", "provider_reported", "catalog_estimate", "unknown"]},
+        "input_micro_usd_per_1k_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "output_micro_usd_per_1k_tokens": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"privacy_class": {"const": "hosted_consent_required"}}},
+      "then": {"properties": {"requires_hosted_egress_ack": {"const": true}}}
+    },
+    {
+      "if": {"properties": {"provider": {"enum": ["fake", "ollama"]}}},
+      "then": {"properties": {"privacy_class": {"const": "offline_private"}, "requires_hosted_egress_ack": {"const": false}}}
+    }
+  ]
+}
