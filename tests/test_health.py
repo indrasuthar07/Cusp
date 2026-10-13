@@ -7,9 +7,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.responses import Response
-
 from app.api.health import health_check, liveness
+from starlette.responses import Response
 
 
 def test_liveness():
@@ -58,7 +57,8 @@ async def test_health_check_db_failure():
 
         assert result.status == "degraded"
         assert result.database.status == "down"
-        assert "Postgres offline" in str(result.database.error)
+        assert result.database.error == "database_unavailable"
+        assert "Postgres offline" not in str(result.database.error)
         assert result.redis.status == "ok"
         assert mock_resp.status_code == 503
 
@@ -82,5 +82,25 @@ async def test_health_check_redis_failure():
         assert result.status == "degraded"
         assert result.database.status == "ok"
         assert result.redis.status == "down"
-        assert "Redis unreachable" in str(result.redis.error)
+        assert result.redis.error == "redis_unavailable"
+        assert "Redis unreachable" not in str(result.redis.error)
         assert mock_resp.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_health_check_does_not_expose_dependency_exception(caplog):
+    mock_resp = Response()
+    mock_engine = MagicMock()
+    secret = "postgres-password-that-must-not-leak"
+    mock_engine.connect.side_effect = RuntimeError(secret)
+    mock_redis = AsyncMock()
+    mock_redis.ping.return_value = True
+
+    with (
+        patch("app.api.health.get_engine", return_value=mock_engine),
+        patch("app.api.health.get_redis_client", new_callable=AsyncMock, return_value=mock_redis),
+    ):
+        result = await health_check(mock_resp)
+
+    assert secret not in result.model_dump_json()
+    assert secret not in caplog.text

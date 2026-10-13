@@ -4,15 +4,17 @@ Health check endpoint for Cusp Gateway.
 
 from __future__ import annotations
 
+import logging
 import time
+
+from app.db import get_engine
+from app.db.redis import get_redis_client
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from app.db import get_engine
-from app.db.redis import get_redis_client
-
 router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 class ComponentHealth(BaseModel):
@@ -45,9 +47,10 @@ async def health_check(response: Response) -> HealthResponse:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         db_latency = round((time.perf_counter() - t0) * 1000, 2)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - health must classify every dependency failure
         db_status = "down"
-        db_error = str(exc)
+        db_error = "database_unavailable"
+        logger.warning("Database health check failed (%s)", type(exc).__name__)
 
     # 2. Redis connectivity check
     redis_status = "ok"
@@ -59,12 +62,13 @@ async def health_check(response: Response) -> HealthResponse:
         pong = await client.ping()
         if not pong:
             redis_status = "down"
-            redis_error = "Ping failed"
+            redis_error = "redis_ping_failed"
         else:
             redis_latency = round((time.perf_counter() - t0) * 1000, 2)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - health must classify every dependency failure
         redis_status = "down"
-        redis_error = str(exc)
+        redis_error = "redis_unavailable"
+        logger.warning("Redis health check failed (%s)", type(exc).__name__)
 
     is_healthy = db_status == "ok" and redis_status == "ok"
     overall_status = "ok" if is_healthy else "degraded"

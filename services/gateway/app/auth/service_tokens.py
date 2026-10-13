@@ -21,15 +21,13 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import datetime, timezone
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from datetime import UTC, datetime
 
 from app.config.settings import get_settings
 from app.db.models import AgentRegistration, ServiceToken
-
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 # Token prefix for easy identification 
 TOKEN_PREFIX = "cusp_"
@@ -66,7 +64,7 @@ async def create_service_token(
     raw_token = TOKEN_PREFIX + secrets.token_hex(RAW_TOKEN_BYTES)
 
     # Hash with the server pepper - only the hash is stored
-    token_hash = _hash_token(raw_token, settings.cusp_token_pepper)
+    token_hash = _hash_token(raw_token, settings.cusp_token_pepper.get_secret_value())
 
     token_row = ServiceToken(
         public_id=uuid.uuid4(),
@@ -97,7 +95,7 @@ async def validate_service_token(
     settings = get_settings()
 
     # Re-hash the presented token with the same pepper
-    token_hash = _hash_token(raw_token, settings.cusp_token_pepper)
+    token_hash = _hash_token(raw_token, settings.cusp_token_pepper.get_secret_value())
 
     stmt = (
         select(ServiceToken)
@@ -119,7 +117,7 @@ async def validate_service_token(
 
     # Check expiry
     if token_row.expires_at is not None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if token_row.expires_at < now:
             return None
 

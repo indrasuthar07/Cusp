@@ -6,11 +6,17 @@ from __future__ import annotations
 
 import os
 import uuid
+from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field, PostgresDsn, RedisDsn
+from pydantic import Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+class WorkerEnvironment(StrEnum):
+    development = "development"
+    test = "test"
+    production = "production"
 
 class WorkerSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -19,12 +25,15 @@ class WorkerSettings(BaseSettings):
         extra="ignore",
     )
 
-    # Core infra connections
+    # Local defaults are intentionally development-only.
+    cusp_env: WorkerEnvironment = WorkerEnvironment.development
     database_url: PostgresDsn = Field(
-        default="postgresql+asyncpg://cusp:cusp_dev@localhost:5432/cusp"  # type: ignore[assignment]
+        default="postgresql+asyncpg://cusp:cusp_dev_only@localhost:5432/cusp",
+        repr=False,  # type: ignore[call-overload]
     )
     redis_url: RedisDsn = Field(
-        default="redis://localhost:6379/0"  # type: ignore[assignment]
+        default="redis://localhost:6379/0",
+        repr=False,  # type: ignore[call-overload]
     )
 
     # Redis Streams config
@@ -40,6 +49,23 @@ class WorkerSettings(BaseSettings):
     block_time_ms: int = 2000
     max_retries: int = 3
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def validate_runtime_configuration(self) -> WorkerSettings:
+        if self.batch_size < 1:
+            raise ValueError("BATCH_SIZE must be at least 1")
+        if self.block_time_ms < 0:
+            raise ValueError("BLOCK_TIME_MS cannot be negative")
+        if self.max_retries < 1:
+            raise ValueError("MAX_RETRIES must be at least 1")
+        if self.log_level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+        if self.cusp_env is WorkerEnvironment.production and (
+            "database_url" not in self.model_fields_set
+            or "redis_url" not in self.model_fields_set
+        ):
+            raise ValueError("production worker requires explicit DATABASE_URL and REDIS_URL")
+        return self
 
 
 @lru_cache(maxsize=1)
