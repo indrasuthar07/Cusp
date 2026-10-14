@@ -41,6 +41,32 @@ export type ProviderProfile = {
   updated_at: string
 }
 
+export type Replay = {
+  run: DashboardRun
+  actions: Array<{
+    action_id: string
+    sequence: number
+    action_type: string
+    provider_profile: string
+    progress: Record<string, unknown>
+    created_at: string
+    decision: {
+      verdict: string
+      reason: string
+      cost_provenance: string
+      approved_profile: string | null
+      loop_score: number | null
+      created_at: string
+    } | null
+  }>
+  audit_events: Array<{
+    event_id: string
+    event_type: string
+    payload: Record<string, unknown>
+    created_at: string
+  }>
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -91,4 +117,16 @@ export function getRuns(): Promise<{ runs: DashboardRun[]; count: number }> {
 
 export function getProviderProfiles(): Promise<{ profiles: ProviderProfile[]; count: number }> {
   return request<{ profiles: ProviderProfile[]; count: number }>('/api/v1/dashboard/provider-profiles')
+}
+
+export function getRunReplay(runId: string): Promise<Replay> {
+  return request<Replay>(`/api/v1/dashboard/runs/${encodeURIComponent(runId)}/replay`)
+}
+
+export function intervene(runId: string, action: 'pause' | 'resume' | 'terminate' | 'kill'): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/v1/dashboard/runs/${encodeURIComponent(runId)}/intervention`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  })
 }

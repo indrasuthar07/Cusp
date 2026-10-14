@@ -4,10 +4,13 @@ import {
   getCurrentUser,
   getHealth,
   getProviderProfiles,
+  getRunReplay,
+  intervene,
   getRuns,
   type DashboardRun,
   type HealthResponse,
   type ProviderProfile,
+  type Replay,
   type UserIdentity,
 } from './api'
 
@@ -24,6 +27,8 @@ function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [runs, setRuns] = useState<DashboardRun[]>([])
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
+  const [replay, setReplay] = useState<Replay | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [activePanel, setActivePanel] = useState<Panel>('overview')
 
   useEffect(() => {
@@ -90,6 +95,22 @@ function App() {
     { id: 'audit', label: 'Audit trail' },
   ]
   const activeLabel = navItems.find((item) => item.id === activePanel)?.label ?? 'Overview'
+  const loadReplay = (runId: string) => {
+    setSelectedRunId(runId)
+    void getRunReplay(runId).then(setReplay)
+  }
+  const sendIntervention = (action: 'pause' | 'resume' | 'terminate' | 'kill') => {
+    if (!selectedRunId) return
+    void intervene(selectedRunId, action).then(() => {
+      void getRuns().then((response) => setRuns(response.runs))
+      void getRunReplay(selectedRunId).then(setReplay)
+    })
+  }
+  const renderRunList = () => runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
+    <ul className="data-list">
+      {runs.map((run) => <li key={run.run_id}><span><strong>{run.agent_name}</strong><small>{run.run_id}</small></span><span className="run-actions"><span className="status-pill running">{run.status}</span><button className="text-button" type="button" onClick={() => loadReplay(run.run_id)}>Replay</button></span></li>)}
+    </ul>
+  )
 
   return (
     <div className="app-shell">
@@ -149,26 +170,14 @@ function App() {
                   <h3>Active runs</h3>
                   <span className="count-badge">{runs.length}</span>
                 </div>
-                {runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
-                  <ul className="data-list">
-                    {runs.map((run) => (
-                      <li key={run.run_id}>
-                        <span><strong>{run.agent_name}</strong><small>{run.run_id}</small></span>
-                        <span className="status-pill running">{run.status}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {renderRunList()}
               </section>
             </div>
           ) : activePanel === 'runs' ? (
             <section className="data-panel">
               <div className="panel-title-row"><h3>Active runs</h3><span className="count-badge">{runs.length}</span></div>
-              {runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
-                <ul className="data-list">
-                  {runs.map((run) => <li key={run.run_id}><span><strong>{run.agent_name}</strong><small>{run.run_id}</small></span><span className="status-pill running">{run.status}</span></li>)}
-                </ul>
-              )}
+              {renderRunList()}
+              {replay && selectedRunId ? <section className="replay-panel" aria-labelledby="replay-title"><div className="panel-title-row"><h3 id="replay-title">Redacted session replay</h3><div className="run-actions"><button className="control-button" type="button" onClick={() => sendIntervention('pause')}>Pause</button><button className="control-button" type="button" onClick={() => sendIntervention('resume')}>Resume</button><button className="control-button danger" type="button" onClick={() => sendIntervention('terminate')}>Terminate</button><button className="control-button danger" type="button" onClick={() => sendIntervention('kill')}>Kill</button></div></div><p className="muted">Only redacted metadata is shown. Prompts, source code, credentials, and decision tokens are never rendered.</p><ul className="timeline">{replay.actions.map((action) => <li key={action.action_id}><strong>#{action.sequence} {action.action_type}</strong><span>{action.provider_profile}</span>{action.decision ? <span className="status-pill">{action.decision.verdict} · {action.decision.reason}</span> : null}</li>)}{replay.audit_events.map((event) => <li key={event.event_id}><strong>{event.event_type}</strong><span>Audit event</span></li>)}</ul></section> : null}
             </section>
           ) : activePanel === 'providers' ? (
             <section className="data-panel">

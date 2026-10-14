@@ -5,11 +5,21 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from app.auth.dependencies import UserIdentity, get_current_user
+from app.auth.dependencies import UserIdentity, get_current_user, require_role
 from app.db import get_db
-from app.db.models import ModelProfile, Session, SessionStatus
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from app.db.models import (
+    ActionAttempt,
+    AuditEvent,
+    Decision,
+    MembershipRole,
+    ModelProfile,
+    Session,
+    SessionStatus,
+)
+from app.events.schemas import redact_payload
+from app.state.budget import budget_engine
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -46,6 +56,50 @@ class DashboardProviderProfile(BaseModel):
 class DashboardProviderProfilesResponse(BaseModel):
     profiles: list[DashboardProviderProfile]
     count: int
+
+
+class ReplayDecision(BaseModel):
+    verdict: str
+    reason: str
+    cost_provenance: str
+    approved_profile: str | None
+    loop_score: float | None
+    created_at: datetime
+
+
+class ReplayAction(BaseModel):
+    action_id: uuid.UUID
+    sequence: int
+    action_type: str
+    provider_profile: str
+    progress: dict
+    created_at: datetime
+    decision: ReplayDecision | None
+
+
+class ReplayAuditEvent(BaseModel):
+    event_id: str
+    event_type: str
+    payload: dict
+    created_at: datetime
+
+
+class RunReplayResponse(BaseModel):
+    run: DashboardRun
+    actions: list[ReplayAction]
+    audit_events: list[ReplayAuditEvent]
+
+
+class InterventionRequest(BaseModel):
+    action: str = Field(pattern="^(pause|resume|terminate|kill)$")
+    reason: str = Field(default="", max_length=500)
+
+
+class InterventionResponse(BaseModel):
+    run_id: uuid.UUID
+    action: str
+    status: str
+    reason: str
 
 
 @router.get("/runs", response_model=DashboardRunsResponse)
@@ -106,3 +160,117 @@ async def list_provider_profiles(
         for profile in result.scalars().all()
     ]
     return DashboardProviderProfilesResponse(profiles=profiles, count=len(profiles))
+
+
+async def _load_user_run(db: AsyncSession, user: UserIdentity, run_id: uuid.UUID) -> Session:
+    result = await db.execute(
+        select(Session)
+        .options(selectinload(Session.agent))
+        .where(Session.public_id == run_id, Session.org_id == user.org_id)
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return run
+
+
+@router.get("/runs/{run_id}/replay", response_model=RunReplayResponse)
+async def replay_run(
+    run_id: uuid.UUID,
+    user: UserIdentity = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RunReplayResponse:
+    """Return a redacted, read-only replay for a run in the user's organization."""
+    run = await _load_user_run(db, user, run_id)
+    actions_result = await db.execute(
+        select(ActionAttempt, Decision)
+        .outerjoin(Decision, Decision.action_id == ActionAttempt.id)
+        .where(ActionAttempt.session_id == run.id)
+        .order_by(ActionAttempt.sequence_number.asc(), Decision.created_at.asc())
+    )
+    actions: list[ReplayAction] = []
+    for action, decision in actions_result.all():
+        actions.append(
+            ReplayAction(
+                action_id=action.public_id,
+                sequence=action.sequence_number,
+                action_type=action.action_type,
+                provider_profile=action.provider_profile,
+                progress=redact_payload(action.progress),
+                created_at=action.created_at,
+                decision=(
+                    ReplayDecision(
+                        verdict=decision.verdict.value,
+                        reason=decision.reason,
+                        cost_provenance=decision.cost_provenance,
+                        approved_profile=decision.approved_profile,
+                        loop_score=decision.loop_score,
+                        created_at=decision.created_at,
+                    )
+                    if decision is not None
+                    else None
+                ),
+            )
+        )
+    events_result = await db.execute(
+        select(AuditEvent)
+        .where(
+            AuditEvent.org_id == user.org_id,
+            AuditEvent.correlation_id == run.public_id,
+        )
+        .order_by(AuditEvent.created_at.asc())
+    )
+    audit_events = [
+        ReplayAuditEvent(
+            event_id=event.event_id,
+            event_type=event.event_type,
+            payload=redact_payload(event.payload),
+            created_at=event.created_at,
+        )
+        for event in events_result.scalars().all()
+    ]
+    run_view = DashboardRun(
+        run_id=run.public_id,
+        status=run.status.value,
+        budget_cap_micro_usd=run.budget_cap_micro_usd,
+        agent_id=run.agent.public_id,
+        agent_name=run.agent.name,
+        started_at=run.started_at,
+        ended_at=run.ended_at,
+    )
+    return RunReplayResponse(run=run_view, actions=actions, audit_events=audit_events)
+
+
+@router.post(
+    "/runs/{run_id}/intervention",
+    response_model=InterventionResponse,
+)
+async def intervene_on_run(
+    run_id: uuid.UUID,
+    body: InterventionRequest,
+    user: UserIdentity = Depends(require_role(MembershipRole.owner, MembershipRole.admin)),
+    db: AsyncSession = Depends(get_db),
+) -> InterventionResponse:
+    """Apply an authenticated, organization-admin intervention to a run."""
+    run = await _load_user_run(db, user, run_id)
+    action = "terminate" if body.action == "kill" else body.action
+    if action == "pause":
+        if run.status is not SessionStatus.running:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_not_running")
+        run.status = SessionStatus.paused
+    elif action == "resume":
+        if run.status is not SessionStatus.paused:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_not_paused")
+        run.status = SessionStatus.running
+    elif action == "terminate":
+        if run.status in {SessionStatus.completed, SessionStatus.terminated, SessionStatus.failed}:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_finished")
+        run.status = SessionStatus.terminated
+    await db.commit()
+    await budget_engine.set_control(str(run.public_id), body.action, body.reason)
+    return InterventionResponse(
+        run_id=run.public_id,
+        action=body.action,
+        status=run.status.value,
+        reason=body.reason,
+    )
