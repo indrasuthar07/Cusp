@@ -134,10 +134,14 @@ async def stream_mcp_request(
     payload: dict,
     *,
     timeout_seconds: float,
+    client: httpx.AsyncClient | None = None,
 ) -> tuple[int, str, AsyncIterator[bytes]]:
     """Open a response stream without forwarding caller credentials."""
 
-    client = httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=False)
+    owns_client = client is None
+    client = client or httpx.AsyncClient(
+        timeout=timeout_seconds, follow_redirects=False
+    )
     try:
         stream_context = client.stream(
             "POST",
@@ -150,7 +154,8 @@ async def stream_mcp_request(
         )
         response = await stream_context.__aenter__()
     except (httpx.HTTPError, OSError) as exc:
-        await client.aclose()
+        if owns_client:
+            await client.aclose()
         raise MCPProxyError(
             "mcp_upstream_unavailable", "MCP upstream is unavailable", status_code=502
         ) from exc
@@ -161,7 +166,8 @@ async def stream_mcp_request(
                 yield chunk
         finally:
             await response.aclose()
-            await client.aclose()
+            if owns_client:
+                await client.aclose()
 
     media_type = response.headers.get("content-type", "application/json").split(";", 1)[
         0

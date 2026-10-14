@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from app.mcp.proxy import (
     MCPProxyError,
     authorize_mcp_request,
     parse_upstream_allowlist,
+    stream_mcp_request,
     validate_jsonrpc_request,
 )
 from app.mcp.redaction import canonical_json, redact_and_canonicalize
@@ -85,3 +87,55 @@ def test_mcp_redaction_is_recursive_and_canonical() -> None:
         == '{"method":"tools/call","params":{"arguments":"[REDACTED]","name":"read_file"}}'
     )
     assert "secret-value" not in canonical_json(payload)
+
+
+@pytest.mark.asyncio
+async def test_streamable_proxy_forwards_only_jsonrpc_payload_and_not_bearer_token() -> (
+    None
+):
+    observed: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["authorization"] = request.headers.get("authorization")
+        observed["payload"] = request.content
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={"jsonrpc": "2.0", "id": 7, "result": {"content": "ok"}},
+        )
+
+    payload = validate_jsonrpc_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {"name": "read_file", "arguments": {"path": "x"}},
+        }
+    )
+    authorize_mcp_request(
+        {
+            "mcp": {
+                "upstreams": ["filesystem"],
+                "methods": ["tools/call"],
+                "tools": {"filesystem": ["read_file"]},
+            }
+        },
+        upstream_name="filesystem",
+        payload=payload,
+    )
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    status_code, media_type, stream = await stream_mcp_request(
+        parse_upstream_allowlist("filesystem=https://mcp.example.test/rpc")[
+            "filesystem"
+        ],
+        payload,
+        timeout_seconds=1,
+        client=client,
+    )
+    response_body = b"".join([chunk async for chunk in stream])
+    await client.aclose()
+    assert status_code == 200
+    assert media_type == "application/json"
+    assert observed["authorization"] is None
+    assert b'"method":"tools/call"' in observed["payload"]  # type: ignore[operator]
+    assert b'"result"' in response_body
