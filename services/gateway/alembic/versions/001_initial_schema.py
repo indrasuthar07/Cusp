@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 
 revision: str = "001_initial"
 down_revision: str | None = None
@@ -14,10 +14,10 @@ depends_on: str | Sequence[str] | None = None
 
 # ── Enum types ──────────────────────────────────────────────────────────
 
-membership_role = sa.Enum(
+membership_role = ENUM(
     "owner", "admin", "member", "viewer", name="membership_role", create_type=False
 )
-provider_kind = sa.Enum(
+provider_kind = ENUM(
     "fake",
     "ollama",
     "gemini",
@@ -28,7 +28,7 @@ provider_kind = sa.Enum(
     name="provider_kind",
     create_type=False,
 )
-session_status = sa.Enum(
+session_status = ENUM(
     "pending",
     "running",
     "paused",
@@ -38,7 +38,7 @@ session_status = sa.Enum(
     name="session_status",
     create_type=False,
 )
-decision_verdict = sa.Enum(
+decision_verdict = ENUM(
     "allow",
     "downgrade",
     "pause",
@@ -47,7 +47,7 @@ decision_verdict = sa.Enum(
     name="decision_verdict",
     create_type=False,
 )
-cost_source = sa.Enum(
+cost_source = ENUM(
     "provider_reported",
     "estimated",
     "virtual",
@@ -55,7 +55,7 @@ cost_source = sa.Enum(
     name="cost_source",
     create_type=False,
 )
-energy_quality = sa.Enum(
+energy_quality = ENUM(
     "measured", "estimated", "unavailable", name="energy_quality", create_type=False
 )
 
