@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from urllib.parse import urlparse
 
 import httpx
@@ -47,7 +48,14 @@ def parse_upstream_allowlist(value: str) -> dict[str, MCPUpstream]:
             )
         url = raw_url.strip()
         parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
             raise MCPProxyError(
                 "invalid_mcp_allowlist", "MCP upstream URLs must use HTTP or HTTPS"
             )
@@ -73,6 +81,52 @@ def validate_jsonrpc_request(payload: object) -> dict:
     if "id" not in payload:
         raise MCPProxyError("invalid_mcp_request", "MCP requests require an id")
     return payload
+
+
+def authorize_mcp_request(
+    scopes: dict,
+    *,
+    upstream_name: str,
+    payload: dict,
+) -> None:
+    """Enforce explicit per-token MCP method, upstream, and tool grants.
+
+    Tokens without an ``mcp`` scope are deny-by-default. The scope contract is
+    ``{"mcp": {"upstreams": [...], "methods": [...], "tools": {name: [...]}}}``.
+    A tool grant may use ``*`` for all tools on an explicitly allowed upstream.
+    """
+
+    mcp_scope = scopes.get("mcp") if isinstance(scopes, dict) else None
+    if not isinstance(mcp_scope, dict):
+        raise MCPProxyError(
+            "mcp_permission_denied", "MCP permission is not granted", status_code=403
+        )
+    upstreams = mcp_scope.get("upstreams", [])
+    if not isinstance(upstreams, list) or upstream_name not in upstreams:
+        raise MCPProxyError(
+            "mcp_upstream_forbidden", "MCP upstream is not granted", status_code=403
+        )
+    method = payload["method"]
+    methods = mcp_scope.get("methods", [])
+    if not isinstance(methods, list) or method not in methods:
+        raise MCPProxyError(
+            "mcp_method_forbidden", "MCP method is not granted", status_code=403
+        )
+    if method != "tools/call":
+        return
+    params = payload.get("params")
+    tool_name = params.get("name") if isinstance(params, dict) else None
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        raise MCPProxyError("invalid_mcp_request", "tools/call requires params.name")
+    tools = mcp_scope.get("tools", {})
+    allowed_tools = tools.get(upstream_name) if isinstance(tools, dict) else None
+    if not isinstance(allowed_tools, list) or not any(
+        isinstance(pattern, str) and fnmatchcase(tool_name, pattern)
+        for pattern in allowed_tools
+    ):
+        raise MCPProxyError(
+            "mcp_tool_forbidden", "MCP tool is not granted", status_code=403
+        )
 
 
 async def stream_mcp_request(

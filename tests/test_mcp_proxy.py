@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 from app.mcp.proxy import (
     MCPProxyError,
+    authorize_mcp_request,
     parse_upstream_allowlist,
     validate_jsonrpc_request,
 )
+from app.mcp.redaction import canonical_json, redact_and_canonicalize
 
 
 def test_allowlist_requires_explicit_http_upstream() -> None:
@@ -15,6 +17,8 @@ def test_allowlist_requires_explicit_http_upstream() -> None:
     assert registry["tools"].url == "https://mcp.example.test/rpc"
     with pytest.raises(MCPProxyError, match="HTTP or HTTPS"):
         parse_upstream_allowlist("tools=file:///etc/passwd")
+    with pytest.raises(MCPProxyError, match="HTTP or HTTPS"):
+        parse_upstream_allowlist("tools=https://user:password@mcp.example.test/rpc")
 
 
 def test_allowlist_rejects_duplicates_and_malformed_entries() -> None:
@@ -39,3 +43,45 @@ def test_jsonrpc_rejects_sampling_and_notifications() -> None:
         )
     with pytest.raises(MCPProxyError, match="require an id"):
         validate_jsonrpc_request({"jsonrpc": "2.0", "method": "tools/call"})
+
+
+def test_mcp_permissions_are_deny_by_default_and_tool_specific() -> None:
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {"path": "secret.txt"}},
+    }
+    with pytest.raises(MCPProxyError, match="permission"):
+        authorize_mcp_request({}, upstream_name="filesystem", payload=payload)
+    scopes = {
+        "mcp": {
+            "upstreams": ["filesystem"],
+            "methods": ["tools/call"],
+            "tools": {"filesystem": ["read_*"]},
+        }
+    }
+    authorize_mcp_request(scopes, upstream_name="filesystem", payload=payload)
+    with pytest.raises(MCPProxyError, match="tool"):
+        authorize_mcp_request(
+            scopes,
+            upstream_name="filesystem",
+            payload={**payload, "params": {"name": "delete_file"}},
+        )
+
+
+def test_mcp_redaction_is_recursive_and_canonical() -> None:
+    payload = {
+        "params": {
+            "arguments": {"path": "private.py", "token": "secret-value"},
+            "name": "read_file",
+        },
+        "method": "tools/call",
+    }
+    safe = redact_and_canonicalize(payload)
+    assert safe["params"]["arguments"] == "[REDACTED]"
+    assert (
+        canonical_json(payload)
+        == '{"method":"tools/call","params":{"arguments":"[REDACTED]","name":"read_file"}}'
+    )
+    assert "secret-value" not in canonical_json(payload)

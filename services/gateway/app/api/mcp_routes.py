@@ -6,6 +6,7 @@ from app.auth.dependencies import AgentIdentity, get_current_agent
 from app.config.settings import get_settings
 from app.mcp.proxy import (
     MCPProxyError,
+    authorize_mcp_request,
     parse_upstream_allowlist,
     stream_mcp_request,
     validate_jsonrpc_request,
@@ -28,7 +29,6 @@ async def proxy_mcp(
     token is used for Cusp authentication and is deliberately not forwarded.
     """
 
-    del agent  # Identity enforcement is performed by the dependency.
     try:
         upstreams = parse_upstream_allowlist(get_settings().cusp_mcp_upstream_allowlist)
         upstream = upstreams.get(upstream_name)
@@ -39,6 +39,11 @@ async def proxy_mcp(
                 status_code=403,
             )
         payload = validate_jsonrpc_request(await request.json())
+        authorize_mcp_request(
+            agent.scopes,
+            upstream_name=upstream_name,
+            payload=payload,
+        )
         status_code, media_type, body = await stream_mcp_request(
             upstream,
             payload,
