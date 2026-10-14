@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     cusp_energy_telemetry_mode: EnergyTelemetryMode = EnergyTelemetryMode.estimated
     cusp_host_wattage_estimate: int | None = Field(default=150, ge=1)
     cusp_mcp_upstream_allowlist: str = ""
+    cusp_mcp_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     cusp_hosted_egress_allowed: bool = False
     cusp_hosted_egress_ack_version: str | None = None
 
