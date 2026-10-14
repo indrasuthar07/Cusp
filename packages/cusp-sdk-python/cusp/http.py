@@ -151,6 +151,7 @@ def _action_payload(action: ActionRequest) -> dict[str, Any]:
         "idempotency_key": action.idempotency_key,
         "data_classification": action.data_classification,
         "summary": action.summary,
+        "progress": action.progress,
     }
 
 

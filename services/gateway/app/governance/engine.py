@@ -24,6 +24,8 @@ class ProgressSignal:
     tests_passed: int = 0
     tests_failed: int = 0
     elapsed_ms: int = 0
+    semantic_similarity: float | None = None
+    embedding_available: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -31,6 +33,11 @@ class ProgressSignal:
             < 0
         ):
             raise ValueError("progress values cannot be negative")
+        if (
+            self.semantic_similarity is not None
+            and not 0 <= self.semantic_similarity <= 1
+        ):
+            raise ValueError("semantic similarity must be between 0 and 1")
 
     @property
     def made_progress(self) -> bool:
@@ -221,6 +228,41 @@ class PolicyResolver:
             score = min(1.0, (repeats + 1) / max(1, repeat_limit))
             return self._decision(
                 context, "pause", "exact_repeat_no_progress", None, score
+            )
+
+        try:
+            semantic = float(loop.get("semantic_similarity_threshold", 0.97))
+            semantic_limit = int(loop.get("semantic_repeat_limit", repeat_limit))
+        except (TypeError, ValueError):
+            return self._decision(context, "pause", "policy_resolution_failed", None)
+        if not 0 <= semantic <= 1 or semantic_limit < 1:
+            return self._decision(context, "pause", "policy_resolution_failed", None)
+        semantic_repeats = sum(
+            1
+            for item in context.recent_progress
+            if item.embedding_available
+            and item.semantic_similarity is not None
+            and item.semantic_similarity >= semantic
+            and not item.made_progress
+        ) + int(
+            context.progress.embedding_available
+            and context.progress.semantic_similarity is not None
+            and context.progress.semantic_similarity >= semantic
+            and not context.progress.made_progress
+        )
+        semantic_is_loop = (
+            context.progress.embedding_available
+            and context.progress.semantic_similarity is not None
+            and context.progress.semantic_similarity >= semantic
+            and not context.progress.made_progress
+        )
+        if semantic_is_loop and semantic_repeats >= max(1, semantic_limit):
+            return self._decision(
+                context,
+                "pause",
+                "semantic_repeat_no_progress",
+                None,
+                context.progress.semantic_similarity,
             )
 
         profile = self.rules.get("downgrade_profile") if action == "downgrade" else None

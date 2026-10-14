@@ -15,4 +15,10 @@ dependencies = [
     "sqlalchemy>=2.0.54",
 ]
 
+[project.optional-dependencies]
+embedding = [
+    "numpy>=2.0",
+    "onnxruntime>=1.20",
+]
+
 

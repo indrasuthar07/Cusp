@@ -54,6 +54,20 @@ async def test_offline_fake_reference_run_completes_without_hosted_provider() ->
 
 
 @pytest.mark.asyncio
+async def test_sdk_forwards_semantic_progress_to_preflight() -> None:
+    transport = InMemoryGatewayTransport()
+    run = await CuspClient(transport).create_run(budget_cap_micro_usd=10)
+    action, decision = await run.preflight(
+        action_type="tool_call",
+        provider_profile="fake",
+        estimated_cost_micro_usd=0,
+        progress={"semantic_similarity": 0.99, "embedding_available": True},
+    )
+    assert decision.verdict.value == "allow"
+    assert transport.actions[action.action_id].progress["semantic_similarity"] == 0.99
+
+
+@pytest.mark.asyncio
 async def test_fake_scenarios_are_deterministic_and_typed() -> None:
     no_progress = DeterministicFakeAdapter(FakeScenario.NO_PROGRESS)
     assert (
