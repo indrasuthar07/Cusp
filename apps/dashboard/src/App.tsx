@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getCurrentUser, getHealth, type HealthResponse, type UserIdentity } from './api'
+import {
+  ApiError,
+  getCurrentUser,
+  getHealth,
+  getProviderProfiles,
+  getRuns,
+  type DashboardRun,
+  type HealthResponse,
+  type ProviderProfile,
+  type UserIdentity,
+} from './api'
 
 type AuthState =
   | { status: 'loading' }
@@ -12,14 +22,18 @@ type Panel = 'overview' | 'runs' | 'providers' | 'policies' | 'audit'
 function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' })
   const [health, setHealth] = useState<HealthResponse | null>(null)
+  const [runs, setRuns] = useState<DashboardRun[]>([])
+  const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [activePanel, setActivePanel] = useState<Panel>('overview')
 
   useEffect(() => {
     let cancelled = false
-    void Promise.allSettled([getCurrentUser(), getHealth()]).then((results) => {
+    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles()]).then((results) => {
       if (cancelled) return
       const userResult = results[0]
       const healthResult = results[1]
+      const runsResult = results[2]
+      const profilesResult = results[3]
       if (userResult.status === 'rejected') {
         if (userResult.reason instanceof ApiError && (userResult.reason.status === 401 || userResult.reason.status === 403)) {
           setAuth({ status: 'signed-out' })
@@ -30,6 +44,8 @@ function App() {
       }
       setAuth({ status: 'authenticated', user: userResult.value })
       if (healthResult.status === 'fulfilled') setHealth(healthResult.value)
+      if (runsResult.status === 'fulfilled') setRuns(runsResult.value.runs)
+      if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value.profiles)
     })
 
     return () => {
@@ -128,7 +144,41 @@ function App() {
                 <strong className={health?.redis.status === 'ok' ? 'healthy' : 'warning'}>{health?.redis.status ?? 'unknown'}</strong>
                 <p>{health?.redis.latency_ms == null ? 'Latency unavailable' : `${health.redis.latency_ms} ms`}</p>
               </section>
+              <section className="data-panel run-panel">
+                <div className="panel-title-row">
+                  <h3>Active runs</h3>
+                  <span className="count-badge">{runs.length}</span>
+                </div>
+                {runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
+                  <ul className="data-list">
+                    {runs.map((run) => (
+                      <li key={run.run_id}>
+                        <span><strong>{run.agent_name}</strong><small>{run.run_id}</small></span>
+                        <span className="status-pill running">{run.status}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             </div>
+          ) : activePanel === 'runs' ? (
+            <section className="data-panel">
+              <div className="panel-title-row"><h3>Active runs</h3><span className="count-badge">{runs.length}</span></div>
+              {runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
+                <ul className="data-list">
+                  {runs.map((run) => <li key={run.run_id}><span><strong>{run.agent_name}</strong><small>{run.run_id}</small></span><span className="status-pill running">{run.status}</span></li>)}
+                </ul>
+              )}
+            </section>
+          ) : activePanel === 'providers' ? (
+            <section className="data-panel">
+              <div className="panel-title-row"><h3>Provider profiles</h3><span className="count-badge">{profiles.length}</span></div>
+              {profiles.length === 0 ? <p className="muted">No provider profiles configured for this organization.</p> : (
+                <div className="profile-grid">
+                  {profiles.map((profile) => <article className="profile-card" key={profile.profile_id}><div className="profile-heading"><h3>{profile.name}</h3><span className={profile.is_enabled ? 'status-pill enabled' : 'status-pill disabled'}>{profile.is_enabled ? 'enabled' : 'disabled'}</span></div><p>{profile.provider_kind} · {profile.model_name}</p><small>Updated {new Date(profile.updated_at).toLocaleString()}</small></article>)}
+                </div>
+              )}
+            </section>
           ) : (
             <section className="empty-panel">
               <h3>{activeLabel}</h3>

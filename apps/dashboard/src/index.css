@@ -28,6 +28,20 @@ button { font: inherit; }
 .session-badge { background: #e8f7ee; border-radius: 999px; color: #146c3a; font-size: .8rem; font-weight: 700; padding: 8px 12px; }
 .card-grid { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric-card, .empty-panel, .status-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 10px 30px rgb(15 23 42 / 5%); padding: 24px; }
+.data-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 10px 30px rgb(15 23 42 / 5%); grid-column: 1 / -1; padding: 24px; }
+.panel-title-row, .profile-heading { align-items: center; display: flex; justify-content: space-between; gap: 16px; }
+.panel-title-row h3, .profile-heading h3 { margin: 0; }
+.count-badge { background: #edf2fa; border-radius: 999px; color: #475569; font-size: .8rem; font-weight: 700; padding: 5px 10px; }
+.muted { color: #64748b; }
+.data-list { list-style: none; margin: 16px 0 0; padding: 0; }
+.data-list li { align-items: center; border-top: 1px solid #edf0f5; display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; }
+.data-list small, .profile-card small { color: #94a3b8; display: block; font-size: .75rem; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; }
+.status-pill { border-radius: 999px; font-size: .75rem; font-weight: 700; padding: 5px 9px; text-transform: capitalize; }
+.status-pill.running, .status-pill.enabled { background: #e8f7ee; color: #146c3a; }
+.status-pill.disabled { background: #f1f5f9; color: #64748b; }
+.profile-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-top: 18px; }
+.profile-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+.profile-card p { color: #475569; font-size: .9rem; margin: 12px 0 0; }
 .metric-label { color: #64748b; display: block; font-size: .85rem; margin-bottom: 16px; }
 .metric-card strong { display: block; font-size: 1.7rem; text-transform: capitalize; }
 .metric-card p, .empty-panel p, .status-card p { color: #64748b; line-height: 1.55; }
