@@ -25,10 +25,11 @@ from app.db.models import (
     ServiceToken,
     User,
 )
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.requests import HTTPConnection
 
 # Resolved identity containers
 
@@ -62,7 +63,7 @@ class UserIdentity:
 
 
 # Helper: extract bearer token from request
-def _extract_bearer_token(request: Request) -> str | None:
+def _extract_bearer_token(request: HTTPConnection) -> str | None:
     """Pull a Bearer token from the Authorization header."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -72,7 +73,7 @@ def _extract_bearer_token(request: Request) -> str | None:
 
 # Agent dependency
 async def get_current_agent(
-    request: Request,
+    request: HTTPConnection,
     db: AsyncSession = Depends(get_db),
 ) -> AgentIdentity:
     """
@@ -117,7 +118,7 @@ async def get_current_agent(
 
 # User dependency
 async def get_current_user(
-    request: Request,
+    request: HTTPConnection,
     db: AsyncSession = Depends(get_db),
 ) -> UserIdentity:
     """Resolve a dashboard user from a verified OIDC ID token.

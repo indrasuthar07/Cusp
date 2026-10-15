@@ -52,6 +52,9 @@ class WorkerSettings(BaseSettings):
     claim_idle_ms: int = 30_000
     retry_hash: str = "cusp:v1:events:retries"
     log_level: str = "INFO"
+    embedding_stream_name: str = "cusp:v1:embeddings"
+    embedding_cache_ttl_seconds: int = Field(default=86_400, ge=1)
+    embedding_dimension: int = Field(default=384, ge=8)
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self) -> WorkerSettings:

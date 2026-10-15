@@ -23,7 +23,9 @@
         "diff_bytes": {"type": "integer", "minimum": 0},
         "tests_passed": {"type": "integer", "minimum": 0},
         "tests_failed": {"type": "integer", "minimum": 0},
-        "elapsed_ms": {"type": "integer", "minimum": 0}
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "semantic_similarity": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "embedding_available": {"type": "boolean"}
       }
     },
     "metadata": {"type": "object", "additionalProperties": false}

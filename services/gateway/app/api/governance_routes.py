@@ -50,6 +50,8 @@ class ProgressRequest(BaseModel):
     tests_passed: int = Field(default=0, ge=0)
     tests_failed: int = Field(default=0, ge=0)
     elapsed_ms: int = Field(default=0, ge=0)
+    semantic_similarity: float | None = Field(default=None, ge=0, le=1)
+    embedding_available: bool = False
 
 
 class PreflightRequest(BaseModel):

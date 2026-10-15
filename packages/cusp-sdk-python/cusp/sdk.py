@@ -55,6 +55,7 @@ class ActionRequest:
     idempotency_key: str
     data_classification: str = "internal"
     summary: str = ""
+    progress: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +160,7 @@ class CuspRun:
         estimated_cost_micro_usd: int,
         data_classification: str = "internal",
         summary: str = "",
+        progress: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> tuple[ActionRequest, Decision]:
         if self.run.state is not RunState.RUNNING:
@@ -179,6 +181,7 @@ class CuspRun:
             or f"{self.run.run_id}:{self._sequence}:{secrets.token_hex(8)}",
             data_classification=data_classification,
             summary=summary,
+            progress=progress or {},
         )
         decision = await self._transport.preflight(action)
         if decision.action_id != action.action_id:
@@ -361,6 +364,7 @@ class InMemoryGatewayTransport:
                     != action.estimated_cost_micro_usd
                     or original_action.data_classification != action.data_classification
                     or original_action.summary != action.summary
+                    or original_action.progress != action.progress
                 ):
                     raise ValueError("idempotency_key_conflict")
                 return original_decision

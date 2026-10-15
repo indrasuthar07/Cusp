@@ -17,6 +17,10 @@ jobs:
   python:
     name: Python tests, lint, format, and types
     runs-on: ubuntu-latest
+    env:
+      CUSP_SESSION_SECRET: ci-only-session-secret-1234567890
+      CUSP_TOKEN_PEPPER: ci-only-token-pepper-1234567890
+      CUSP_PRICING_CATALOG_PATH: ${{ github.workspace }}/docs/pricing.json
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -65,6 +69,8 @@ jobs:
         run: pnpm exec tsc -b
       - name: Build dashboard
         run: pnpm build
+      - name: Dashboard API client tests
+        run: pnpm test
       - name: Audit dashboard dependencies
         run: pnpm audit --audit-level high
 
@@ -78,3 +84,35 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  compose:
+    name: Production Compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CUSP_SESSION_SECRET: ci-only-session-secret-1234567890
+      CUSP_TOKEN_PEPPER: ci-only-token-pepper-1234567890
+      CUSP_PRICING_CATALOG_PATH: /app/docs/pricing.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build and start the production-shaped stack
+        run: docker compose up --build -d
+      - name: Wait for gateway health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8000/health/liveness >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://localhost:8000/health
+          curl --fail --silent http://localhost:5173 >/dev/null
+          docker compose ps
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v
