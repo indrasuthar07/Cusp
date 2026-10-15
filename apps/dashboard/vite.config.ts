@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': gatewayUrl,
+      '/api': { target: gatewayUrl, ws: true },
       '/health': gatewayUrl,
     },
   },

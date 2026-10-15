@@ -45,6 +45,8 @@ button { font: inherit; }
 .timeline li { display: flex; flex-direction: column; gap: 5px; padding: 0 0 18px; position: relative; }
 .timeline li::before { background: #4f7dc9; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #9bb5df; content: ''; height: 8px; left: -25px; position: absolute; top: 2px; width: 8px; }
 .timeline li span { color: #64748b; font-size: .8rem; }
+.policy-name, .policy-editor { border: 1px solid #dbe4f0; border-radius: 8px; color: #172033; display: block; font: inherit; margin: 12px 0; padding: 10px 12px; width: 100%; }
+.policy-editor { background: #0f172a; color: #dbeafe; font-family: ui-monospace, Consolas, monospace; min-height: 150px; resize: vertical; }
 .status-pill { border-radius: 999px; font-size: .75rem; font-weight: 700; padding: 5px 9px; text-transform: capitalize; }
 .status-pill.running, .status-pill.enabled { background: #e8f7ee; color: #146c3a; }
 .status-pill.disabled { background: #f1f5f9; color: #64748b; }

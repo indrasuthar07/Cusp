@@ -67,6 +67,31 @@ export type Replay = {
   }>
 }
 
+export type PolicyVersion = {
+  version_id: string
+  version_number: number
+  rules: Record<string, unknown>
+  is_published: boolean
+  created_at: string
+}
+
+export type PolicySet = {
+  policy_set_id: string
+  name: string
+  schema_version: number
+  is_active: boolean
+  versions: PolicyVersion[]
+}
+
+export type LiveEvent = {
+  event_id: string
+  stream_id: string
+  event_type: string
+  session_id: string | null
+  payload: Record<string, unknown>
+  created_at?: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -129,4 +154,29 @@ export function intervene(runId: string, action: 'pause' | 'resume' | 'terminate
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action }),
   })
+}
+
+export function getPolicies(): Promise<{ policies: PolicySet[] }> {
+  return request<{ policies: PolicySet[] }>('/api/v1/dashboard/policies')
+}
+
+export function createPolicy(name: string, rules: Record<string, unknown>): Promise<{ policy_set_id: string; version_number: number }> {
+  return request<{ policy_set_id: string; version_number: number }>('/api/v1/dashboard/policies', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, rules }),
+  })
+}
+
+export function createPolicyVersion(policySetId: string, rules: Record<string, unknown>): Promise<{ version_number: number }> {
+  return request<{ version_number: number }>(`/api/v1/dashboard/policies/${encodeURIComponent(policySetId)}/versions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }),
+  })
+}
+
+export function publishPolicyVersion(policySetId: string, versionNumber: number): Promise<{ version_number: number }> {
+  return request<{ version_number: number }>(`/api/v1/dashboard/policies/${encodeURIComponent(policySetId)}/versions/${versionNumber}/publish`, { method: 'POST' })
+}
+
+export function getLiveEvents(after?: string): Promise<{ events: LiveEvent[] }> {
+  const query = after ? `?after=${encodeURIComponent(after)}` : ''
+  return request<{ events: LiveEvent[] }>(`/api/v1/dashboard/events${query}`)
 }

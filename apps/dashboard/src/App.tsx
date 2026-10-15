@@ -4,12 +4,19 @@ import {
   getCurrentUser,
   getHealth,
   getProviderProfiles,
+  getPolicies,
+  getLiveEvents,
+  createPolicyVersion,
+  createPolicy,
+  publishPolicyVersion,
   getRunReplay,
   intervene,
   getRuns,
   type DashboardRun,
   type HealthResponse,
   type ProviderProfile,
+  type PolicySet,
+  type LiveEvent,
   type Replay,
   type UserIdentity,
 } from './api'
@@ -29,16 +36,23 @@ function App() {
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [replay, setReplay] = useState<Replay | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [policies, setPolicies] = useState<PolicySet[]>([])
+  const [policyJson, setPolicyJson] = useState('{"default_action":"pause"}')
+  const [policyName, setPolicyName] = useState('Default policy')
+  const [policyMessage, setPolicyMessage] = useState('')
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
+  const [liveStatus, setLiveStatus] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
   const [activePanel, setActivePanel] = useState<Panel>('overview')
 
   useEffect(() => {
     let cancelled = false
-    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles()]).then((results) => {
+    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles(), getPolicies()]).then((results) => {
       if (cancelled) return
       const userResult = results[0]
       const healthResult = results[1]
       const runsResult = results[2]
       const profilesResult = results[3]
+      const policiesResult = results[4]
       if (userResult.status === 'rejected') {
         if (userResult.reason instanceof ApiError && (userResult.reason.status === 401 || userResult.reason.status === 403)) {
           setAuth({ status: 'signed-out' })
@@ -51,12 +65,51 @@ function App() {
       if (healthResult.status === 'fulfilled') setHealth(healthResult.value)
       if (runsResult.status === 'fulfilled') setRuns(runsResult.value.runs)
       if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value.profiles)
+      if (policiesResult.status === 'fulfilled') setPolicies(policiesResult.value.policies)
     })
 
     return () => {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (auth.status !== 'authenticated') return
+    let stopped = false
+    let socket: WebSocket | null = null
+    let retryTimer: number | undefined
+    let lastCreatedAt: string | undefined
+    const mergeEvents = (incoming: LiveEvent[]) => {
+      if (incoming.length > 0) lastCreatedAt = incoming[incoming.length - 1].created_at ?? lastCreatedAt
+      setLiveEvents((current) => {
+        const merged = new Map(current.map((event) => [event.event_id, event]))
+        incoming.forEach((event) => merged.set(event.event_id, event))
+        return Array.from(merged.values()).slice(-100)
+      })
+    }
+    const synchronize = () => getLiveEvents(lastCreatedAt).then((response) => mergeEvents(response.events)).catch(() => undefined)
+    const connect = () => {
+      if (stopped) return
+      setLiveStatus('connecting')
+      socket = new WebSocket(`${window.location.origin.replace(/^http/, 'ws')}/api/v1/dashboard/live`)
+      socket.onopen = () => {
+        setLiveStatus('connected')
+        socket?.send(JSON.stringify({ last_event_id: '$' }))
+      }
+      socket.onmessage = (message) => {
+        try { mergeEvents([JSON.parse(message.data) as LiveEvent]) } catch { /* Ignore malformed server frames. */ }
+      }
+      socket.onclose = () => {
+        if (stopped) return
+        setLiveStatus('reconnecting')
+        void synchronize()
+        retryTimer = window.setTimeout(connect, 2000)
+      }
+      socket.onerror = () => socket?.close()
+    }
+    void synchronize().finally(connect)
+    return () => { stopped = true; if (retryTimer) window.clearTimeout(retryTimer); socket?.close() }
+  }, [auth.status])
 
   if (auth.status === 'loading') {
     return <main className="status-page" aria-live="polite">Checking your Cusp session…</main>
@@ -105,6 +158,27 @@ function App() {
       void getRuns().then((response) => setRuns(response.runs))
       void getRunReplay(selectedRunId).then(setReplay)
     })
+  }
+  const updatePolicyVersion = () => {
+    const policy = policies[0]
+    if (!policy || !['owner', 'admin'].includes(user.role)) return
+    try {
+      const rules = JSON.parse(policyJson) as Record<string, unknown>
+      void createPolicyVersion(policy.policy_set_id, rules).then(() => getPolicies()).then((response) => { setPolicies(response.policies); setPolicyMessage('Draft version created.') }).catch(() => setPolicyMessage('Could not create policy draft.'))
+    } catch { setPolicyMessage('Policy JSON is invalid.') }
+  }
+  const createPolicySet = () => {
+    if (!['owner', 'admin'].includes(user.role)) return
+    try {
+      const rules = JSON.parse(policyJson) as Record<string, unknown>
+      void createPolicy(policyName, rules).then(() => getPolicies()).then((response) => { setPolicies(response.policies); setPolicyMessage('Policy draft created.') }).catch(() => setPolicyMessage('Could not create policy.'))
+    } catch { setPolicyMessage('Policy JSON is invalid.') }
+  }
+  const publishLatestPolicy = () => {
+    const policy = policies[0]
+    const latest = policy?.versions.find((version) => !version.is_published)
+    if (!policy || !latest || !['owner', 'admin'].includes(user.role)) return
+    void publishPolicyVersion(policy.policy_set_id, latest.version_number).then(() => getPolicies()).then((response) => { setPolicies(response.policies); setPolicyMessage(`Version ${latest.version_number} published.`) }).catch(() => setPolicyMessage('Could not publish policy version.'))
   }
   const renderRunList = () => runs.length === 0 ? <p className="muted">No running sessions in this organization.</p> : (
     <ul className="data-list">
@@ -187,6 +261,11 @@ function App() {
                   {profiles.map((profile) => <article className="profile-card" key={profile.profile_id}><div className="profile-heading"><h3>{profile.name}</h3><span className={profile.is_enabled ? 'status-pill enabled' : 'status-pill disabled'}>{profile.is_enabled ? 'enabled' : 'disabled'}</span></div><p>{profile.provider_kind} · {profile.model_name}</p><small>Updated {new Date(profile.updated_at).toLocaleString()}</small></article>)}
                 </div>
               )}
+            </section>
+          ) : activePanel === 'policies' ? (
+            <section className="data-panel">
+              <div className="panel-title-row"><h3>Policy editor</h3><span className={`live-indicator ${liveStatus}`}>{liveStatus} live feed · {liveEvents.length} events</span></div>
+              {policies.length === 0 ? <><p className="muted">No policy set has been configured for this organization.</p><input className="policy-name" aria-label="Policy name" value={policyName} onChange={(event) => setPolicyName(event.target.value)} /><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={createPolicySet}>Create policy draft</button></> : <><p className="muted">Editing <strong>{policies[0].name}</strong>. New changes are drafts until explicitly published.</p><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><div className="run-actions"><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={updatePolicyVersion}>Save draft version</button><button className="control-button" disabled={!['owner', 'admin'].includes(user.role) || !policies[0].versions.some((version) => !version.is_published)} type="button" onClick={publishLatestPolicy}>Publish latest draft</button></div>{policyMessage ? <p className="muted" role="status">{policyMessage}</p> : null}<ul className="data-list">{policies[0].versions.map((version) => <li key={version.version_id}><span><strong>Version {version.version_number}</strong><small>{new Date(version.created_at).toLocaleString()}</small></span><span className={version.is_published ? 'status-pill enabled' : 'status-pill'}>{version.is_published ? 'published' : 'draft'}</span></li>)}</ul></>}
             </section>
           ) : (
             <section className="empty-panel">
