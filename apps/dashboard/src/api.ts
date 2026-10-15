@@ -92,6 +92,30 @@ export type LiveEvent = {
   created_at?: string
 }
 
+export type ProviderMetric = {
+  provider_kind: string
+  model_profile: string
+  actions: number
+  virtual_cost_micro_usd: number
+  provider_cost_micro_usd: number | null
+  cost_provenance: string
+  avg_latency_ms: number | null
+  energy_wh: number | null
+  quota_status: string
+  health_status: string
+}
+
+export type ModelEvaluation = {
+  model_profile: string
+  provider_kind: string
+  samples: number
+  average_latency_ms: number | null
+  average_virtual_cost_micro_usd: number | null
+  average_ev_score: number | null
+  average_loop_score: number | null
+  evaluation_available: boolean
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -179,4 +203,12 @@ export function publishPolicyVersion(policySetId: string, versionNumber: number)
 export function getLiveEvents(after?: string): Promise<{ events: LiveEvent[] }> {
   const query = after ? `?after=${encodeURIComponent(after)}` : ''
   return request<{ events: LiveEvent[] }>(`/api/v1/dashboard/events${query}`)
+}
+
+export function getMetrics(): Promise<{ providers: ProviderMetric[]; total_virtual_cost_micro_usd: number; total_provider_cost_micro_usd: number | null; total_energy_wh: number | null }> {
+  return request('/api/v1/dashboard/metrics')
+}
+
+export function getModelEvaluations(): Promise<{ models: ModelEvaluation[] }> {
+  return request<{ models: ModelEvaluation[] }>('/api/v1/dashboard/model-evaluations')
 }

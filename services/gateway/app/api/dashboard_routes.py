@@ -19,6 +19,7 @@ from app.db.models import (
     PolicyVersion,
     Session,
     SessionStatus,
+    UsageRecord,
 )
 from app.db.redis import get_redis_client
 from app.events.schemas import EVENTS_STREAM_NAME, redact_payload
@@ -33,7 +34,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -118,6 +119,41 @@ class LiveEvent(BaseModel):
 
 class LiveEventsResponse(BaseModel):
     events: list[LiveEvent]
+
+
+class ProviderMetric(BaseModel):
+    provider_kind: str
+    model_profile: str
+    actions: int
+    virtual_cost_micro_usd: int
+    provider_cost_micro_usd: int | None
+    cost_provenance: str
+    avg_latency_ms: float | None
+    energy_wh: float | None
+    quota_status: str
+    health_status: str
+
+
+class MetricsResponse(BaseModel):
+    providers: list[ProviderMetric]
+    total_virtual_cost_micro_usd: int
+    total_provider_cost_micro_usd: int | None
+    total_energy_wh: float | None
+
+
+class ModelEvaluation(BaseModel):
+    model_profile: str
+    provider_kind: str
+    samples: int
+    average_latency_ms: float | None
+    average_virtual_cost_micro_usd: float | None
+    average_ev_score: float | None
+    average_loop_score: float | None
+    evaluation_available: bool
+
+
+class ModelEvaluationResponse(BaseModel):
+    models: list[ModelEvaluation]
 
 
 class ReplayDecision(BaseModel):
@@ -374,6 +410,108 @@ async def list_live_events(
         )
         for event in result.scalars().all()
     ])
+
+
+@router.get("/metrics", response_model=MetricsResponse)
+async def dashboard_metrics(
+    user: UserIdentity = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MetricsResponse:
+    """Return cost, latency, energy, and provider health for one organization."""
+    usage_result = await db.execute(
+        select(
+            UsageRecord.provider_kind,
+            UsageRecord.model_profile_name,
+            func.count(UsageRecord.id),
+            func.coalesce(func.sum(UsageRecord.actual_virtual_cost_micro_usd), 0),
+            func.sum(UsageRecord.provider_reported_cost_micro_usd),
+            func.avg(UsageRecord.latency_ms),
+            func.sum(UsageRecord.energy_wh),
+        )
+        .join(ActionAttempt, UsageRecord.action_id == ActionAttempt.id)
+        .join(Session, ActionAttempt.session_id == Session.id)
+        .where(Session.org_id == user.org_id)
+        .group_by(UsageRecord.provider_kind, UsageRecord.model_profile_name)
+    )
+    profiles_result = await db.execute(
+        select(ModelProfile).where(ModelProfile.org_id == user.org_id)
+    )
+    profile_status = {(profile.provider_kind.value, profile.name): profile.is_enabled for profile in profiles_result.scalars().all()}
+    metrics: list[ProviderMetric] = []
+    for provider, model, actions, virtual_cost, provider_cost, latency, energy in usage_result.all():
+        provider_name = provider.value
+        metrics.append(
+            ProviderMetric(
+                provider_kind=provider_name,
+                model_profile=model,
+                actions=int(actions),
+                virtual_cost_micro_usd=int(virtual_cost or 0),
+                provider_cost_micro_usd=int(provider_cost) if provider_cost is not None else None,
+                cost_provenance="provider_reported" if provider_cost is not None else "virtual",
+                avg_latency_ms=float(latency) if latency is not None else None,
+                energy_wh=float(energy) if energy is not None else None,
+                quota_status="unknown",
+                health_status="healthy" if profile_status.get((provider_name, model), True) else "disabled",
+            )
+        )
+    total_virtual = sum(metric.virtual_cost_micro_usd for metric in metrics)
+    provider_costs = [metric.provider_cost_micro_usd for metric in metrics if metric.provider_cost_micro_usd is not None]
+    energy_values = [metric.energy_wh for metric in metrics if metric.energy_wh is not None]
+    return MetricsResponse(
+        providers=metrics,
+        total_virtual_cost_micro_usd=total_virtual,
+        total_provider_cost_micro_usd=sum(provider_costs) if provider_costs else None,
+        total_energy_wh=sum(energy_values) if energy_values else None,
+    )
+
+
+@router.get("/model-evaluations", response_model=ModelEvaluationResponse)
+async def model_evaluations(
+    user: UserIdentity = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ModelEvaluationResponse:
+    """Compare persisted telemetry and governance signals without inventing scores."""
+    usage_result = await db.execute(
+        select(
+            UsageRecord.provider_kind,
+            UsageRecord.model_profile_name,
+            func.count(UsageRecord.id),
+            func.avg(UsageRecord.latency_ms),
+            func.avg(UsageRecord.actual_virtual_cost_micro_usd),
+        )
+        .join(ActionAttempt, UsageRecord.action_id == ActionAttempt.id)
+        .join(Session, ActionAttempt.session_id == Session.id)
+        .where(Session.org_id == user.org_id)
+        .group_by(UsageRecord.provider_kind, UsageRecord.model_profile_name)
+    )
+    decision_result = await db.execute(
+        select(
+            ActionAttempt.provider_profile,
+            func.avg(Decision.ev_score),
+            func.avg(Decision.loop_score),
+        )
+        .join(Decision, Decision.action_id == ActionAttempt.id)
+        .join(Session, ActionAttempt.session_id == Session.id)
+        .where(Session.org_id == user.org_id)
+        .group_by(ActionAttempt.provider_profile)
+    )
+    decision_scores = {profile: (ev, loop) for profile, ev, loop in decision_result.all()}
+    models: list[ModelEvaluation] = []
+    for provider, model, samples, latency, cost in usage_result.all():
+        ev_score, loop_score = decision_scores.get(model, (None, None))
+        models.append(
+            ModelEvaluation(
+                model_profile=model,
+                provider_kind=provider.value,
+                samples=int(samples),
+                average_latency_ms=float(latency) if latency is not None else None,
+                average_virtual_cost_micro_usd=float(cost) if cost is not None else None,
+                average_ev_score=float(ev_score) if ev_score is not None else None,
+                average_loop_score=float(loop_score) if loop_score is not None else None,
+                evaluation_available=ev_score is not None or loop_score is not None,
+            )
+        )
+    return ModelEvaluationResponse(models=models)
 
 
 @router.websocket("/live")

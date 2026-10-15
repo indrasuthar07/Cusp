@@ -6,6 +6,8 @@ import {
   getProviderProfiles,
   getPolicies,
   getLiveEvents,
+  getMetrics,
+  getModelEvaluations,
   createPolicyVersion,
   createPolicy,
   publishPolicyVersion,
@@ -17,6 +19,8 @@ import {
   type ProviderProfile,
   type PolicySet,
   type LiveEvent,
+  type ProviderMetric,
+  type ModelEvaluation,
   type Replay,
   type UserIdentity,
 } from './api'
@@ -27,7 +31,7 @@ type AuthState =
   | { status: 'signed-out' }
   | { status: 'error'; message: string }
 
-type Panel = 'overview' | 'runs' | 'providers' | 'policies' | 'audit'
+type Panel = 'overview' | 'runs' | 'providers' | 'metrics' | 'evaluations' | 'policies' | 'audit'
 
 function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' })
@@ -42,17 +46,21 @@ function App() {
   const [policyMessage, setPolicyMessage] = useState('')
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
   const [liveStatus, setLiveStatus] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
+  const [metrics, setMetrics] = useState<{ providers: ProviderMetric[]; total_virtual_cost_micro_usd: number; total_provider_cost_micro_usd: number | null; total_energy_wh: number | null } | null>(null)
+  const [evaluations, setEvaluations] = useState<ModelEvaluation[]>([])
   const [activePanel, setActivePanel] = useState<Panel>('overview')
 
   useEffect(() => {
     let cancelled = false
-    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles(), getPolicies()]).then((results) => {
+    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles(), getPolicies(), getMetrics(), getModelEvaluations()]).then((results) => {
       if (cancelled) return
       const userResult = results[0]
       const healthResult = results[1]
       const runsResult = results[2]
       const profilesResult = results[3]
       const policiesResult = results[4]
+      const metricsResult = results[5]
+      const evaluationsResult = results[6]
       if (userResult.status === 'rejected') {
         if (userResult.reason instanceof ApiError && (userResult.reason.status === 401 || userResult.reason.status === 403)) {
           setAuth({ status: 'signed-out' })
@@ -66,6 +74,8 @@ function App() {
       if (runsResult.status === 'fulfilled') setRuns(runsResult.value.runs)
       if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value.profiles)
       if (policiesResult.status === 'fulfilled') setPolicies(policiesResult.value.policies)
+      if (metricsResult.status === 'fulfilled') setMetrics(metricsResult.value)
+      if (evaluationsResult.status === 'fulfilled') setEvaluations(evaluationsResult.value.models)
     })
 
     return () => {
@@ -144,6 +154,8 @@ function App() {
     { id: 'overview', label: 'Overview' },
     { id: 'runs', label: 'Active runs' },
     { id: 'providers', label: 'Providers' },
+    { id: 'metrics', label: 'Cost & health' },
+    { id: 'evaluations', label: 'Model evaluation' },
     { id: 'policies', label: 'Policies' },
     { id: 'audit', label: 'Audit trail' },
   ]
@@ -267,6 +279,13 @@ function App() {
               <div className="panel-title-row"><h3>Policy editor</h3><span className={`live-indicator ${liveStatus}`}>{liveStatus} live feed · {liveEvents.length} events</span></div>
               {policies.length === 0 ? <><p className="muted">No policy set has been configured for this organization.</p><input className="policy-name" aria-label="Policy name" value={policyName} onChange={(event) => setPolicyName(event.target.value)} /><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={createPolicySet}>Create policy draft</button></> : <><p className="muted">Editing <strong>{policies[0].name}</strong>. New changes are drafts until explicitly published.</p><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><div className="run-actions"><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={updatePolicyVersion}>Save draft version</button><button className="control-button" disabled={!['owner', 'admin'].includes(user.role) || !policies[0].versions.some((version) => !version.is_published)} type="button" onClick={publishLatestPolicy}>Publish latest draft</button></div>{policyMessage ? <p className="muted" role="status">{policyMessage}</p> : null}<ul className="data-list">{policies[0].versions.map((version) => <li key={version.version_id}><span><strong>Version {version.version_number}</strong><small>{new Date(version.created_at).toLocaleString()}</small></span><span className={version.is_published ? 'status-pill enabled' : 'status-pill'}>{version.is_published ? 'published' : 'draft'}</span></li>)}</ul></>}
             </section>
+          ) : activePanel === 'metrics' ? (
+            <section className="data-panel">
+              <div className="card-grid compact-grid"><section className="metric-card"><span className="metric-label">Virtual cost</span><strong>{metrics ? `${metrics.total_virtual_cost_micro_usd} μUSD` : '—'}</strong><p>Local governance estimate</p></section><section className="metric-card"><span className="metric-label">Provider cost</span><strong>{metrics?.total_provider_cost_micro_usd == null ? 'Unavailable' : `${metrics.total_provider_cost_micro_usd} μUSD`}</strong><p>Only provider-reported values</p></section><section className="metric-card"><span className="metric-label">Energy</span><strong>{metrics?.total_energy_wh == null ? 'Unavailable' : `${metrics.total_energy_wh.toFixed(2)} Wh`}</strong><p>Measured or estimated telemetry</p></section></div>
+              <ul className="data-list">{(metrics?.providers ?? []).map((metric) => <li key={`${metric.provider_kind}-${metric.model_profile}`}><span><strong>{metric.model_profile}</strong><small>{metric.provider_kind} · {metric.actions} actions · {metric.avg_latency_ms == null ? 'latency unavailable' : `${metric.avg_latency_ms.toFixed(0)} ms avg`}</small></span><span className={`status-pill ${metric.health_status === 'healthy' ? 'enabled' : 'disabled'}`}>{metric.health_status} · quota {metric.quota_status}</span></li>)}</ul>
+            </section>
+          ) : activePanel === 'evaluations' ? (
+            <section className="data-panel"><h3>Model evaluation comparison</h3><p className="muted">Scores are shown only when persisted evaluation signals exist; no synthetic scores are generated.</p>{evaluations.length === 0 ? <p className="muted">No model evaluation telemetry is available yet.</p> : <div className="profile-grid">{evaluations.map((model) => <article className="profile-card" key={`${model.provider_kind}-${model.model_profile}`}><div className="profile-heading"><h3>{model.model_profile}</h3><span className="status-pill">{model.evaluation_available ? 'evaluated' : 'telemetry only'}</span></div><p>{model.provider_kind} · {model.samples} samples</p><small>Latency: {model.average_latency_ms == null ? '—' : `${model.average_latency_ms.toFixed(0)} ms`} · Virtual cost: {model.average_virtual_cost_micro_usd == null ? '—' : `${model.average_virtual_cost_micro_usd.toFixed(1)} μUSD`}</small><small>EV: {model.average_ev_score == null ? '—' : model.average_ev_score.toFixed(3)} · Loop: {model.average_loop_score == null ? '—' : model.average_loop_score.toFixed(3)}</small></article>)}</div>}</section>
           ) : (
             <section className="empty-panel">
               <h3>{activeLabel}</h3>
