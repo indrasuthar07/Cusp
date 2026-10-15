@@ -261,7 +261,9 @@ async def list_provider_profiles(
 
 
 def _policy_view(policy: PolicySet) -> PolicySetView:
-    versions = sorted(policy.versions, key=lambda version: version.version_number, reverse=True)
+    versions = sorted(
+        policy.versions, key=lambda version: version.version_number, reverse=True
+    )
     return PolicySetView(
         policy_set_id=policy.public_id,
         name=policy.name,
@@ -291,45 +293,73 @@ async def list_policies(
         .where(PolicySet.org_id == user.org_id)
         .order_by(PolicySet.created_at.desc())
     )
-    return PolicyListResponse(policies=[_policy_view(policy) for policy in result.scalars().all()])
+    return PolicyListResponse(
+        policies=[_policy_view(policy) for policy in result.scalars().all()]
+    )
 
 
 def _validate_policy_rules(rules: dict) -> None:
     allowed_actions = {"allow", "downgrade", "pause", "escalate", "kill"}
     default_action = rules.get("default_action", "pause")
     if default_action not in allowed_actions:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_action is invalid")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="default_action is invalid",
+        )
     if "budgets" in rules and not isinstance(rules["budgets"], dict):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="budgets must be an object")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="budgets must be an object",
+        )
     if "fail_safe" in rules and not isinstance(rules["fail_safe"], dict):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="fail_safe must be an object")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="fail_safe must be an object",
+        )
 
 
-@router.post("/policies", response_model=PolicyVersionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/policies",
+    response_model=PolicyVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_policy(
     body: PolicyCreateRequest,
-    user: UserIdentity = Depends(require_role(MembershipRole.owner, MembershipRole.admin)),
+    user: UserIdentity = Depends(
+        require_role(MembershipRole.owner, MembershipRole.admin)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
     _validate_policy_rules(body.rules)
     policy = PolicySet(
-        public_id=uuid.uuid4(), org_id=user.org_id, name=body.name, schema_version=1, is_active=True
+        public_id=uuid.uuid4(),
+        org_id=user.org_id,
+        name=body.name,
+        schema_version=1,
+        is_active=True,
     )
     db.add(policy)
     await db.flush()
     version = PolicyVersion(
-        public_id=uuid.uuid4(), policy_set_id=policy.id, version_number=1,
-        rules=redact_payload(body.rules), is_published=False,
+        public_id=uuid.uuid4(),
+        policy_set_id=policy.id,
+        version_number=1,
+        rules=redact_payload(body.rules),
+        is_published=False,
     )
     db.add(version)
     await db.commit()
     return PolicyVersionResponse(
-        policy_set_id=policy.public_id, version_id=version.public_id,
-        version_number=version.version_number, is_published=version.is_published,
+        policy_set_id=policy.public_id,
+        version_id=version.public_id,
+        version_number=version.version_number,
+        is_published=version.is_published,
     )
 
 
-async def _load_policy_set(db: AsyncSession, user: UserIdentity, policy_set_id: uuid.UUID) -> PolicySet:
+async def _load_policy_set(
+    db: AsyncSession, user: UserIdentity, policy_set_id: uuid.UUID
+) -> PolicySet:
     result = await db.execute(
         select(PolicySet)
         .options(selectinload(PolicySet.versions))
@@ -337,49 +367,76 @@ async def _load_policy_set(db: AsyncSession, user: UserIdentity, policy_set_id: 
     )
     policy = result.scalar_one_or_none()
     if policy is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy set not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Policy set not found"
+        )
     return policy
 
 
-@router.post("/policies/{policy_set_id}/versions", response_model=PolicyVersionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/policies/{policy_set_id}/versions",
+    response_model=PolicyVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_policy_version(
     policy_set_id: uuid.UUID,
     body: PolicyVersionCreateRequest,
-    user: UserIdentity = Depends(require_role(MembershipRole.owner, MembershipRole.admin)),
+    user: UserIdentity = Depends(
+        require_role(MembershipRole.owner, MembershipRole.admin)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
     _validate_policy_rules(body.rules)
     policy = await _load_policy_set(db, user, policy_set_id)
-    next_number = max((version.version_number for version in policy.versions), default=0) + 1
+    next_number = (
+        max((version.version_number for version in policy.versions), default=0) + 1
+    )
     version = PolicyVersion(
-        public_id=uuid.uuid4(), policy_set_id=policy.id, version_number=next_number,
-        rules=redact_payload(body.rules), is_published=False,
+        public_id=uuid.uuid4(),
+        policy_set_id=policy.id,
+        version_number=next_number,
+        rules=redact_payload(body.rules),
+        is_published=False,
     )
     db.add(version)
     await db.commit()
     return PolicyVersionResponse(
-        policy_set_id=policy.public_id, version_id=version.public_id,
-        version_number=version.version_number, is_published=False,
+        policy_set_id=policy.public_id,
+        version_id=version.public_id,
+        version_number=version.version_number,
+        is_published=False,
     )
 
 
-@router.post("/policies/{policy_set_id}/versions/{version_number}/publish", response_model=PolicyVersionResponse)
+@router.post(
+    "/policies/{policy_set_id}/versions/{version_number}/publish",
+    response_model=PolicyVersionResponse,
+)
 async def publish_policy_version(
     policy_set_id: uuid.UUID,
     version_number: int,
-    user: UserIdentity = Depends(require_role(MembershipRole.owner, MembershipRole.admin)),
+    user: UserIdentity = Depends(
+        require_role(MembershipRole.owner, MembershipRole.admin)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
     policy = await _load_policy_set(db, user, policy_set_id)
-    version = next((item for item in policy.versions if item.version_number == version_number), None)
+    version = next(
+        (item for item in policy.versions if item.version_number == version_number),
+        None,
+    )
     if version is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy version not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Policy version not found"
+        )
     for item in policy.versions:
         item.is_published = item.id == version.id
     await db.commit()
     return PolicyVersionResponse(
-        policy_set_id=policy.public_id, version_id=version.public_id,
-        version_number=version.version_number, is_published=True,
+        policy_set_id=policy.public_id,
+        version_id=version.public_id,
+        version_number=version.version_number,
+        is_published=True,
     )
 
 
@@ -403,13 +460,19 @@ async def list_live_events(
     if after is not None:
         statement = statement.where(AuditEvent.created_at > after)
     result = await db.execute(statement)
-    return LiveEventsResponse(events=[
-        LiveEvent(
-            event_id=event.event_id, stream_id=event.event_id, event_type=event.event_type,
-            session_id=str(event.correlation_id), payload=redact_payload(event.payload), created_at=event.created_at,
-        )
-        for event in result.scalars().all()
-    ])
+    return LiveEventsResponse(
+        events=[
+            LiveEvent(
+                event_id=event.event_id,
+                stream_id=event.event_id,
+                event_type=event.event_type,
+                session_id=str(event.correlation_id),
+                payload=redact_payload(event.payload),
+                created_at=event.created_at,
+            )
+            for event in result.scalars().all()
+        ]
+    )
 
 
 @router.get("/metrics", response_model=MetricsResponse)
@@ -436,9 +499,20 @@ async def dashboard_metrics(
     profiles_result = await db.execute(
         select(ModelProfile).where(ModelProfile.org_id == user.org_id)
     )
-    profile_status = {(profile.provider_kind.value, profile.name): profile.is_enabled for profile in profiles_result.scalars().all()}
+    profile_status = {
+        (profile.provider_kind.value, profile.name): profile.is_enabled
+        for profile in profiles_result.scalars().all()
+    }
     metrics: list[ProviderMetric] = []
-    for provider, model, actions, virtual_cost, provider_cost, latency, energy in usage_result.all():
+    for (
+        provider,
+        model,
+        actions,
+        virtual_cost,
+        provider_cost,
+        latency,
+        energy,
+    ) in usage_result.all():
         provider_name = provider.value
         metrics.append(
             ProviderMetric(
@@ -446,17 +520,29 @@ async def dashboard_metrics(
                 model_profile=model,
                 actions=int(actions),
                 virtual_cost_micro_usd=int(virtual_cost or 0),
-                provider_cost_micro_usd=int(provider_cost) if provider_cost is not None else None,
-                cost_provenance="provider_reported" if provider_cost is not None else "virtual",
+                provider_cost_micro_usd=int(provider_cost)
+                if provider_cost is not None
+                else None,
+                cost_provenance="provider_reported"
+                if provider_cost is not None
+                else "virtual",
                 avg_latency_ms=float(latency) if latency is not None else None,
                 energy_wh=float(energy) if energy is not None else None,
                 quota_status="unknown",
-                health_status="healthy" if profile_status.get((provider_name, model), True) else "disabled",
+                health_status="healthy"
+                if profile_status.get((provider_name, model), True)
+                else "disabled",
             )
         )
     total_virtual = sum(metric.virtual_cost_micro_usd for metric in metrics)
-    provider_costs = [metric.provider_cost_micro_usd for metric in metrics if metric.provider_cost_micro_usd is not None]
-    energy_values = [metric.energy_wh for metric in metrics if metric.energy_wh is not None]
+    provider_costs = [
+        metric.provider_cost_micro_usd
+        for metric in metrics
+        if metric.provider_cost_micro_usd is not None
+    ]
+    energy_values = [
+        metric.energy_wh for metric in metrics if metric.energy_wh is not None
+    ]
     return MetricsResponse(
         providers=metrics,
         total_virtual_cost_micro_usd=total_virtual,
@@ -495,7 +581,9 @@ async def model_evaluations(
         .where(Session.org_id == user.org_id)
         .group_by(ActionAttempt.provider_profile)
     )
-    decision_scores = {profile: (ev, loop) for profile, ev, loop in decision_result.all()}
+    decision_scores = {
+        profile: (ev, loop) for profile, ev, loop in decision_result.all()
+    }
     models: list[ModelEvaluation] = []
     for provider, model, samples, latency, cost in usage_result.all():
         ev_score, loop_score = decision_scores.get(model, (None, None))
@@ -505,9 +593,13 @@ async def model_evaluations(
                 provider_kind=provider.value,
                 samples=int(samples),
                 average_latency_ms=float(latency) if latency is not None else None,
-                average_virtual_cost_micro_usd=float(cost) if cost is not None else None,
+                average_virtual_cost_micro_usd=float(cost)
+                if cost is not None
+                else None,
                 average_ev_score=float(ev_score) if ev_score is not None else None,
-                average_loop_score=float(loop_score) if loop_score is not None else None,
+                average_loop_score=float(loop_score)
+                if loop_score is not None
+                else None,
                 evaluation_available=ev_score is not None or loop_score is not None,
             )
         )
@@ -515,7 +607,9 @@ async def model_evaluations(
 
 
 @router.websocket("/live")
-async def live_feed(websocket: WebSocket, user: UserIdentity = Depends(get_current_user)) -> None:
+async def live_feed(
+    websocket: WebSocket, user: UserIdentity = Depends(get_current_user)
+) -> None:
     """Stream redacted events for the authenticated organization only."""
     await websocket.accept()
     try:
@@ -523,11 +617,19 @@ async def live_feed(websocket: WebSocket, user: UserIdentity = Depends(get_curre
         last_id = str(request.get("last_event_id") or "$")
         client = await get_redis_client()
         while True:
-            entries = cast(Any, await client.xread({EVENTS_STREAM_NAME: last_id}, count=100, block=5000))
+            entries = cast(
+                Any,
+                await client.xread(
+                    {EVENTS_STREAM_NAME: last_id}, count=100, block=5000
+                ),
+            )
             for _stream, messages in entries:
                 for stream_id, fields in messages:
                     last_id = _decode_stream_value(stream_id)
-                    decoded = {_decode_stream_value(key): _decode_stream_value(value) for key, value in fields.items()}
+                    decoded = {
+                        _decode_stream_value(key): _decode_stream_value(value)
+                        for key, value in fields.items()
+                    }
                     if decoded.get("org_id") != str(user.org_id):
                         continue
                     raw_payload = decoded.get("payload", "{}")
@@ -535,16 +637,22 @@ async def live_feed(websocket: WebSocket, user: UserIdentity = Depends(get_curre
                         payload = json.loads(raw_payload)
                     except json.JSONDecodeError:
                         payload = {}
-                    await websocket.send_json({
-                        "event_id": decoded.get("event_id", last_id), "stream_id": last_id,
-                        "event_type": decoded.get("event_type", "UNKNOWN"),
-                        "session_id": decoded.get("session_id"), "payload": redact_payload(payload),
-                    })
+                    await websocket.send_json(
+                        {
+                            "event_id": decoded.get("event_id", last_id),
+                            "stream_id": last_id,
+                            "event_type": decoded.get("event_type", "UNKNOWN"),
+                            "session_id": decoded.get("session_id"),
+                            "payload": redact_payload(payload),
+                        }
+                    )
     except WebSocketDisconnect:
         return
 
 
-async def _load_user_run(db: AsyncSession, user: UserIdentity, run_id: uuid.UUID) -> Session:
+async def _load_user_run(
+    db: AsyncSession, user: UserIdentity, run_id: uuid.UUID
+) -> Session:
     result = await db.execute(
         select(Session)
         .options(selectinload(Session.agent))
@@ -552,7 +660,9 @@ async def _load_user_run(db: AsyncSession, user: UserIdentity, run_id: uuid.UUID
     )
     run = result.scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Run not found"
+        )
     return run
 
 
@@ -630,7 +740,9 @@ async def replay_run(
 async def intervene_on_run(
     run_id: uuid.UUID,
     body: InterventionRequest,
-    user: UserIdentity = Depends(require_role(MembershipRole.owner, MembershipRole.admin)),
+    user: UserIdentity = Depends(
+        require_role(MembershipRole.owner, MembershipRole.admin)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> InterventionResponse:
     """Apply an authenticated, organization-admin intervention to a run."""
@@ -638,15 +750,25 @@ async def intervene_on_run(
     action = "terminate" if body.action == "kill" else body.action
     if action == "pause":
         if run.status is not SessionStatus.running:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_not_running")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="run_is_not_running"
+            )
         run.status = SessionStatus.paused
     elif action == "resume":
         if run.status is not SessionStatus.paused:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_not_paused")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="run_is_not_paused"
+            )
         run.status = SessionStatus.running
     elif action == "terminate":
-        if run.status in {SessionStatus.completed, SessionStatus.terminated, SessionStatus.failed}:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="run_is_finished")
+        if run.status in {
+            SessionStatus.completed,
+            SessionStatus.terminated,
+            SessionStatus.failed,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="run_is_finished"
+            )
         run.status = SessionStatus.terminated
     await db.commit()
     await budget_engine.set_control(str(run.public_id), body.action, body.reason)
