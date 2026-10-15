@@ -200,6 +200,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="topbar">
         <div>
           <p className="eyebrow">CUSP CONTROL PLANE</p>
@@ -218,6 +219,7 @@ function App() {
               className={activePanel === item.id ? 'nav-item active' : 'nav-item'}
               key={item.id}
               onClick={() => setActivePanel(item.id)}
+              aria-current={activePanel === item.id ? 'page' : undefined}
               type="button"
             >
               {item.label}
@@ -225,13 +227,13 @@ function App() {
           ))}
         </nav>
 
-        <main className="content" aria-labelledby="panel-title">
+        <main className="content" id="main-content" tabIndex={-1} aria-labelledby="panel-title">
           <div className="content-heading">
             <div>
               <p className="eyebrow">{user.org_public_id}</p>
               <h2 id="panel-title">{activeLabel}</h2>
             </div>
-            <span className="session-badge">OIDC session active</span>
+            <span className="session-badge" role="status">OIDC session active</span>
           </div>
 
           {activePanel === 'overview' ? (
@@ -276,7 +278,7 @@ function App() {
             </section>
           ) : activePanel === 'policies' ? (
             <section className="data-panel">
-              <div className="panel-title-row"><h3>Policy editor</h3><span className={`live-indicator ${liveStatus}`}>{liveStatus} live feed · {liveEvents.length} events</span></div>
+              <div className="panel-title-row"><h3>Policy editor</h3><span className={`live-indicator ${liveStatus}`} role="status" aria-live="polite">{liveStatus} live feed · {liveEvents.length} events</span></div>
               {policies.length === 0 ? <><p className="muted">No policy set has been configured for this organization.</p><input className="policy-name" aria-label="Policy name" value={policyName} onChange={(event) => setPolicyName(event.target.value)} /><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={createPolicySet}>Create policy draft</button></> : <><p className="muted">Editing <strong>{policies[0].name}</strong>. New changes are drafts until explicitly published.</p><textarea className="policy-editor" aria-label="Policy rules JSON" value={policyJson} onChange={(event) => setPolicyJson(event.target.value)} /><div className="run-actions"><button className="control-button" disabled={!['owner', 'admin'].includes(user.role)} type="button" onClick={updatePolicyVersion}>Save draft version</button><button className="control-button" disabled={!['owner', 'admin'].includes(user.role) || !policies[0].versions.some((version) => !version.is_published)} type="button" onClick={publishLatestPolicy}>Publish latest draft</button></div>{policyMessage ? <p className="muted" role="status">{policyMessage}</p> : null}<ul className="data-list">{policies[0].versions.map((version) => <li key={version.version_id}><span><strong>Version {version.version_number}</strong><small>{new Date(version.created_at).toLocaleString()}</small></span><span className={version.is_published ? 'status-pill enabled' : 'status-pill'}>{version.is_published ? 'published' : 'draft'}</span></li>)}</ul></>}
             </section>
           ) : activePanel === 'metrics' ? (
