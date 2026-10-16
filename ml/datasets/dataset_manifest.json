@@ -1,0 +1,231 @@
+{
+  "data_file": "deterministic_actions.jsonl",
+  "dataset_name": "cusp-deterministic-scenarios",
+  "dataset_version": "1.0.0",
+  "feature_schema_version": "1.0.0",
+  "label_schema_version": "1.0.0",
+  "run_outcome_distribution": {
+    "paused": 11,
+    "succeeded": 11
+  },
+  "scenarios": [
+    {
+      "description": "Clean success: model reads context, writes fix, tests all pass. No loops, budget comfortable.",
+      "num_actions": 6,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-001",
+      "task_id": "task-A-fix-auth-bug",
+      "verified_success": true
+    },
+    {
+      "description": "Success with iterative test fixes: tests first fail, then pass after targeted file edits.",
+      "num_actions": 6,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-002",
+      "task_id": "task-A-fix-auth-bug",
+      "verified_success": true
+    },
+    {
+      "description": "Exact-repeat loop: same fingerprint repeated with no progress. Policy pauses on the 3rd occurrence (exact_repeat_limit=3).",
+      "num_actions": 3,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-003",
+      "task_id": "task-A-fix-auth-bug",
+      "verified_success": false
+    },
+    {
+      "description": "Repeat loop broken by progress: fingerprint repeats reach limit but diff_bytes>0 on action 3 sets made_progress=True, suppressing the pause. Run recovers and succeeds.",
+      "num_actions": 5,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-004",
+      "task_id": "task-B-refactor-api",
+      "verified_success": true
+    },
+    {
+      "description": "Semantic loop: high cosine similarity (>=0.95) with no progress. Pauses when semantic_repeats reaches semantic_repeat_limit=2.",
+      "num_actions": 3,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-005",
+      "task_id": "task-B-refactor-api",
+      "verified_success": false
+    },
+    {
+      "description": "Policy default_action=downgrade: every action is routed to the cheaper ollama profile. Run completes successfully with downgraded model.",
+      "num_actions": 5,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-006",
+      "task_id": "task-B-refactor-api",
+      "verified_success": true
+    },
+    {
+      "description": "Run budget cap exceeded: run_cap=3000 micro-USD. Three actions complete (total spent=2850); fourth action pushes run_spent+estimated over cap \u2192 pause.",
+      "num_actions": 4,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-007",
+      "task_id": "task-C-budget-constraint",
+      "verified_success": false
+    },
+    {
+      "description": "Provider quota exhausted: second action reports quota_exhausted. fail_safe.on_provider_quota_failure=pause \u2192 run stops.",
+      "num_actions": 2,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-008",
+      "task_id": "task-C-budget-constraint",
+      "verified_success": false
+    },
+    {
+      "description": "Quota exhausted triggers downgrade to ollama. Run continues on the cheaper profile and succeeds.",
+      "num_actions": 4,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-009",
+      "task_id": "task-C-budget-constraint",
+      "verified_success": true
+    },
+    {
+      "description": "Provider timeout error: not a quota error, but the generic provider_error path in the engine still uses on_provider_quota_failure=pause \u2192 run stops.",
+      "num_actions": 2,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-010",
+      "task_id": "task-D-failure-modes",
+      "verified_success": false
+    },
+    {
+      "description": "Hosted egress consent required: policy has hosted_egress.enabled=True but the simulated agent has hosted_egress_allowed=False \u2192 immediate pause.",
+      "num_actions": 1,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-011",
+      "task_id": "task-D-failure-modes",
+      "verified_success": false
+    },
+    {
+      "description": "Organization budget cap exceeded: org_cap=2000 micro-USD, tight. Two actions complete (org_spent=1900); third pushes org total over cap \u2192 pause.",
+      "num_actions": 3,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-012",
+      "task_id": "task-D-failure-modes",
+      "verified_success": false
+    },
+    {
+      "description": "Test-writing workflow: plan, implement tests, iterate until all pass. Eight actions, all allowed, verified success.",
+      "num_actions": 8,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-013",
+      "task_id": "task-E-test-suite",
+      "verified_success": true
+    },
+    {
+      "description": "Multi-action with progressive test improvements: context read, model planning, implementation, three test rounds, final review. Nine actions all allowed.",
+      "num_actions": 9,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-014",
+      "task_id": "task-E-test-suite",
+      "verified_success": true
+    },
+    {
+      "description": "Exact-repeat suppressed by made_progress: fingerprint repeats reach the limit (3>=3) on action 2, but diff_bytes>0 sets made_progress=True, suppressing the pause. Run succeeds \u2014 demonstrates a training 'near-miss'.",
+      "num_actions": 6,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-015",
+      "task_id": "task-E-test-suite",
+      "verified_success": true
+    },
+    {
+      "description": "Default downgrade policy with run_cap=50000: every action is downgraded to local-ollama regardless of other signals. Run completes successfully.",
+      "num_actions": 4,
+      "provider_kind": "fake",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-fake-016",
+      "task_id": "task-F-dep-update",
+      "verified_success": true
+    },
+    {
+      "description": "Data classification blocked: agent has hosted egress consent (hosted_egress_allowed=True) but submits 'confidential' data. Policy only allows ['public','internal'] \u2192 pause (data_classification_not_allowed).",
+      "num_actions": 1,
+      "provider_kind": "fake",
+      "run_outcome": "paused",
+      "scenario_id": "scn-fake-017",
+      "task_id": "task-F-dep-update",
+      "verified_success": false
+    },
+    {
+      "description": "Ollama local success: CI configuration is written and validated. Four actions, larger virtual budget, no loops or errors.",
+      "num_actions": 4,
+      "provider_kind": "ollama_simulated",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-ollama-001",
+      "task_id": "task-G-ci-setup",
+      "verified_success": true
+    },
+    {
+      "description": "Ollama exact-repeat loop: local model generates identical outputs with no file change. Pauses on 3rd occurrence.",
+      "num_actions": 3,
+      "provider_kind": "ollama_simulated",
+      "run_outcome": "paused",
+      "scenario_id": "scn-ollama-002",
+      "task_id": "task-G-ci-setup",
+      "verified_success": false
+    },
+    {
+      "description": "Ollama virtual budget limit: run_cap=15000 micro-USD (tight for local compute). Three actions complete (spent=14400); fourth pushes over cap \u2192 pause.",
+      "num_actions": 4,
+      "provider_kind": "ollama_simulated",
+      "run_outcome": "paused",
+      "scenario_id": "scn-ollama-003",
+      "task_id": "task-H-db-migration",
+      "verified_success": false
+    },
+    {
+      "description": "Ollama semantic loop: ONNX embeddings show high cosine similarity (>=0.95) across three responses with no code change \u2192 pause on action 2.",
+      "num_actions": 3,
+      "provider_kind": "ollama_simulated",
+      "run_outcome": "paused",
+      "scenario_id": "scn-ollama-004",
+      "task_id": "task-H-db-migration",
+      "verified_success": false
+    },
+    {
+      "description": "Ollama success with mixed action types: model exploration (same fp twice), file migration, test run with 1 failure, targeted fix. Five actions all allowed.",
+      "num_actions": 5,
+      "provider_kind": "ollama_simulated",
+      "run_outcome": "succeeded",
+      "scenario_id": "scn-ollama-005",
+      "task_id": "task-H-db-migration",
+      "verified_success": true
+    }
+  ],
+  "sha256": "e99d7e9a2659caa2dd9bef35bbe375f166e0cd93cda5755c0f3dfbd3cb8b0e02",
+  "total_actions": 91,
+  "total_scenarios": 22,
+  "unique_tasks": [
+    "task-A-fix-auth-bug",
+    "task-B-refactor-api",
+    "task-C-budget-constraint",
+    "task-D-failure-modes",
+    "task-E-test-suite",
+    "task-F-dep-update",
+    "task-G-ci-setup",
+    "task-H-db-migration"
+  ],
+  "verdict_distribution": {
+    "allow": 70,
+    "downgrade": 10,
+    "escalate": 0,
+    "kill": 0,
+    "pause": 11
+  }
+}
