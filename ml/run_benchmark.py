@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "services" / "gateway"))
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "packages" / "cusp-sdk-python"))
 
 from ml.benchmarks.runner import main
 

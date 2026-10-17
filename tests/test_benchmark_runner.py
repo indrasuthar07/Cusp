@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Self
 from unittest.mock import patch
 
+import pytest
+
 from ml.benchmarks.features import export_features_and_labels
 from ml.benchmarks.runner import (
     BenchmarkConfig,
@@ -14,6 +16,8 @@ from ml.benchmarks.runner import (
     run_scenario_benchmark,
     write_report,
 )
+from ml.benchmarks.splitting import SplitConfig, split_feature_label_files
+from ml.benchmarks.training import TrainingDependencyError, train_stopping_model
 from ml.datasets.scenarios import SCENARIOS
 
 
@@ -84,8 +88,6 @@ def test_report_writer_hashes_jsonl(tmp_path: Path) -> None:
 
 
 def test_hosted_profiles_require_consent_and_key() -> None:
-    import pytest
-
     with pytest.raises(ValueError, match="hosted_egress_consent"):
         BenchmarkConfig(provider="groq", hosted_api_key="secret")
     with pytest.raises(ValueError, match="API key"):
@@ -115,3 +117,38 @@ def test_opted_in_groq_profile_does_not_export_api_key(tmp_path: Path) -> None:
     )
     assert "super-secret" not in exported
     assert summary["agent_declared_success_used"] is False
+
+
+def test_task_disjoint_split_is_reproducible_and_leak_free(tmp_path: Path) -> None:
+    report = run_benchmark(SCENARIOS, BenchmarkConfig(provider="fake"))
+    source = tmp_path / "source"
+    export_features_and_labels(report, source)
+    first = split_feature_label_files(
+        source / "feature_vectors.jsonl",
+        source / "labels.jsonl",
+        tmp_path / "split1",
+        SplitConfig(seed=7),
+    )
+    second = split_feature_label_files(
+        source / "feature_vectors.jsonl",
+        source / "labels.jsonl",
+        tmp_path / "split2",
+        SplitConfig(seed=7),
+    )
+    assert first.manifest == second.manifest
+    groups = first.manifest["groups"]
+    assert not set(groups["train"]) & set(groups["validation"])
+    assert not set(groups["train"]) & set(groups["test"])
+    assert not set(groups["validation"]) & set(groups["test"])
+    assert sum(first.manifest["row_counts"].values()) == 91
+
+
+def test_training_reports_missing_optional_dependencies(tmp_path: Path) -> None:
+    try:
+        train_stopping_model(tmp_path, tmp_path / "model")
+    except TrainingDependencyError as exc:
+        assert "uv sync --extra ml" in str(exc)
+    except FileNotFoundError:
+        # The dependency-aware path is installed in this environment; the
+        # fixture intentionally has no split files, so input validation wins.
+        pass

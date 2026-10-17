@@ -47,6 +47,32 @@ Every report also exports `feature_vectors.jsonl`, `labels.jsonl`, and
 signals only. Labels include deterministic policy outcomes and verified run
 outcomes; agent-declared success is explicitly excluded from ground truth.
 
+Create task-disjoint splits before training:
+
+```powershell
+uv run python ml/split_dataset.py `
+  --features ml/benchmarks/results/feature_vectors.jsonl `
+  --labels ml/benchmarks/results/labels.jsonl `
+  --output-dir ml/benchmarks/splits
+```
+
+The split manifest records the seed, group assignments, row counts, source
+hashes, and pairwise leakage checks. Re-running with the same seed and inputs is
+idempotent. Train the optional calibrated XGBoost model with:
+
+```powershell
+uv sync --extra ml
+uv run python ml/train_model.py `
+  --split-dir ml/benchmarks/splits `
+  --output-dir ml/benchmarks/model
+```
+
+Training fits XGBoost on train groups, fits Platt calibration on validation
+groups, and reports held-out precision, recall, Brier calibration score,
+confusion matrices, deterministic-policy baseline comparison, cost impact, and
+latency. The ML extra is optional; offline benchmark and gateway tests do not
+install or import it.
+
 Energy is an estimate calculated from `--wattage` and action latency. Pass
 `--wattage 0` to report energy as unavailable. This estimate must not be
 presented as measured hardware telemetry.

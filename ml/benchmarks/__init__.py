@@ -14,6 +14,13 @@ from .runner import (
     run_benchmark,
     run_scenario_benchmark,
 )
+from .splitting import (
+    SplitConfig,
+    SplitResult,
+    split_feature_label_files,
+    validate_split_manifest,
+)
+from .training import TrainingDependencyError, train_stopping_model
 
 __all__ = [
     "FEATURE_SCHEMA_VERSION",
@@ -21,9 +28,15 @@ __all__ = [
     "BenchmarkConfig",
     "BenchmarkRecord",
     "BenchmarkReport",
+    "SplitConfig",
+    "SplitResult",
+    "TrainingDependencyError",
     "export_features_and_labels",
     "feature_vector",
     "label_record",
     "run_benchmark",
     "run_scenario_benchmark",
+    "split_feature_label_files",
+    "train_stopping_model",
+    "validate_split_manifest",
 ]
