@@ -19,6 +19,7 @@ def test_dashboard_contract_contains_tenant_safe_read_and_control_routes() -> No
         "/api/v1/dashboard/events",
         "/api/v1/dashboard/metrics",
         "/api/v1/dashboard/model-evaluations",
+        "/api/v1/dashboard/shadow-recommendations",
     }
     assert expected <= paths
 

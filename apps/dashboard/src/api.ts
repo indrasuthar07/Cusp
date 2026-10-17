@@ -116,6 +116,18 @@ export type ModelEvaluation = {
   evaluation_available: boolean
 }
 
+export type ShadowRecommendation = {
+  recommendation_id: string
+  action_id: string
+  model_name: string
+  model_version: string
+  recommended_verdict: string
+  confidence: number
+  deterministic_verdict: string
+  applied: boolean
+  created_at: string
+}
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -211,4 +223,8 @@ export function getMetrics(): Promise<{ providers: ProviderMetric[]; total_virtu
 
 export function getModelEvaluations(): Promise<{ models: ModelEvaluation[] }> {
   return request<{ models: ModelEvaluation[] }>('/api/v1/dashboard/model-evaluations')
+}
+
+export function getShadowRecommendations(): Promise<{ recommendations: ShadowRecommendation[] }> {
+  return request<{ recommendations: ShadowRecommendation[] }>('/api/v1/dashboard/shadow-recommendations')
 }

@@ -92,6 +92,22 @@ existing version fails. The generated card marks the model as shadow-only and
 documents intended use, metrics, training data, limitations, and reproducibility
 information.
 
+To enable shadow recommendations in a development gateway, point the gateway at
+the registered artifact and explicitly enable shadow mode:
+
+```powershell
+$env:CUSP_SHADOW_MODE_ENABLED = "true"
+$env:CUSP_SHADOW_MODEL_ARTIFACT = "C:\path\to\registry\cusp-stopping-risk\1.0.0\artifacts\stopping_model.pkl"
+$env:CUSP_SHADOW_MODEL_NAME = "cusp-stopping-risk"
+$env:CUSP_SHADOW_MODEL_VERSION = "1.0.0"
+```
+
+The gateway writes one recommendation per action to the shadow table and serves
+them at `/api/v1/dashboard/shadow-recommendations`. Each row includes the model
+recommendation, confidence, and deterministic verdict. `applied` is always
+false in this phase; shadow inference failures are ignored so deterministic
+preflight behavior remains unchanged.
+
 Energy is an estimate calculated from `--wattage` and action latency. Pass
 `--wattage 0` to report energy as unavailable. This estimate must not be
 presented as measured hardware telemetry.

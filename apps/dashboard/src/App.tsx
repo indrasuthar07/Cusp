@@ -8,6 +8,7 @@ import {
   getLiveEvents,
   getMetrics,
   getModelEvaluations,
+  getShadowRecommendations,
   createPolicyVersion,
   createPolicy,
   publishPolicyVersion,
@@ -21,6 +22,7 @@ import {
   type LiveEvent,
   type ProviderMetric,
   type ModelEvaluation,
+  type ShadowRecommendation,
   type Replay,
   type UserIdentity,
 } from './api'
@@ -48,11 +50,12 @@ function App() {
   const [liveStatus, setLiveStatus] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
   const [metrics, setMetrics] = useState<{ providers: ProviderMetric[]; total_virtual_cost_micro_usd: number; total_provider_cost_micro_usd: number | null; total_energy_wh: number | null } | null>(null)
   const [evaluations, setEvaluations] = useState<ModelEvaluation[]>([])
+  const [shadowRecommendations, setShadowRecommendations] = useState<ShadowRecommendation[]>([])
   const [activePanel, setActivePanel] = useState<Panel>('overview')
 
   useEffect(() => {
     let cancelled = false
-    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles(), getPolicies(), getMetrics(), getModelEvaluations()]).then((results) => {
+    void Promise.allSettled([getCurrentUser(), getHealth(), getRuns(), getProviderProfiles(), getPolicies(), getMetrics(), getModelEvaluations(), getShadowRecommendations()]).then((results) => {
       if (cancelled) return
       const userResult = results[0]
       const healthResult = results[1]
@@ -61,6 +64,7 @@ function App() {
       const policiesResult = results[4]
       const metricsResult = results[5]
       const evaluationsResult = results[6]
+      const shadowResult = results[7]
       if (userResult.status === 'rejected') {
         if (userResult.reason instanceof ApiError && (userResult.reason.status === 401 || userResult.reason.status === 403)) {
           setAuth({ status: 'signed-out' })
@@ -76,6 +80,7 @@ function App() {
       if (policiesResult.status === 'fulfilled') setPolicies(policiesResult.value.policies)
       if (metricsResult.status === 'fulfilled') setMetrics(metricsResult.value)
       if (evaluationsResult.status === 'fulfilled') setEvaluations(evaluationsResult.value.models)
+      if (shadowResult.status === 'fulfilled') setShadowRecommendations(shadowResult.value.recommendations)
     })
 
     return () => {
@@ -287,7 +292,7 @@ function App() {
               <ul className="data-list">{(metrics?.providers ?? []).map((metric) => <li key={`${metric.provider_kind}-${metric.model_profile}`}><span><strong>{metric.model_profile}</strong><small>{metric.provider_kind} · {metric.actions} actions · {metric.avg_latency_ms == null ? 'latency unavailable' : `${metric.avg_latency_ms.toFixed(0)} ms avg`}</small></span><span className={`status-pill ${metric.health_status === 'healthy' ? 'enabled' : 'disabled'}`}>{metric.health_status} · quota {metric.quota_status}</span></li>)}</ul>
             </section>
           ) : activePanel === 'evaluations' ? (
-            <section className="data-panel"><h3>Model evaluation comparison</h3><p className="muted">Scores are shown only when persisted evaluation signals exist; no synthetic scores are generated.</p>{evaluations.length === 0 ? <p className="muted">No model evaluation telemetry is available yet.</p> : <div className="profile-grid">{evaluations.map((model) => <article className="profile-card" key={`${model.provider_kind}-${model.model_profile}`}><div className="profile-heading"><h3>{model.model_profile}</h3><span className="status-pill">{model.evaluation_available ? 'evaluated' : 'telemetry only'}</span></div><p>{model.provider_kind} · {model.samples} samples</p><small>Latency: {model.average_latency_ms == null ? '—' : `${model.average_latency_ms.toFixed(0)} ms`} · Virtual cost: {model.average_virtual_cost_micro_usd == null ? '—' : `${model.average_virtual_cost_micro_usd.toFixed(1)} μUSD`}</small><small>EV: {model.average_ev_score == null ? '—' : model.average_ev_score.toFixed(3)} · Loop: {model.average_loop_score == null ? '—' : model.average_loop_score.toFixed(3)}</small></article>)}</div>}</section>
+            <section className="data-panel"><h3>Model evaluation comparison</h3><p className="muted">Scores are shown only when persisted evaluation signals exist; no synthetic scores are generated.</p>{evaluations.length === 0 ? <p className="muted">No model evaluation telemetry is available yet.</p> : <div className="profile-grid">{evaluations.map((model) => <article className="profile-card" key={`${model.provider_kind}-${model.model_profile}`}><div className="profile-heading"><h3>{model.model_profile}</h3><span className="status-pill">{model.evaluation_available ? 'evaluated' : 'telemetry only'}</span></div><p>{model.provider_kind} · {model.samples} samples</p><small>Latency: {model.average_latency_ms == null ? '—' : `${model.average_latency_ms.toFixed(0)} ms`} · Virtual cost: {model.average_virtual_cost_micro_usd == null ? '—' : `${model.average_virtual_cost_micro_usd.toFixed(1)} μUSD`}</small><small>EV: {model.average_ev_score == null ? '—' : model.average_ev_score.toFixed(3)} · Loop: {model.average_loop_score == null ? '—' : model.average_loop_score.toFixed(3)}</small></article>)}</div>}<h3>Shadow recommendations</h3><p className="muted">Learned recommendations are observational only; deterministic governance remains authoritative.</p>{shadowRecommendations.length === 0 ? <p className="muted">No shadow recommendations have been recorded.</p> : <div className="profile-grid">{shadowRecommendations.slice(0, 12).map((item) => <article className="profile-card" key={item.recommendation_id}><div className="profile-heading"><h3>{item.recommended_verdict} · {(item.confidence * 100).toFixed(1)}%</h3><span className="status-pill">shadow only</span></div><p>{item.model_name} v{item.model_version}</p><small>Deterministic decision: {item.deterministic_verdict} · Applied: {item.applied ? 'yes' : 'no'}</small></article>)}</div>}</section>
           ) : (
             <section className="empty-panel">
               <h3>{activeLabel}</h3>

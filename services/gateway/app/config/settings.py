@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     cusp_hosted_egress_allowed: bool = False
     cusp_hosted_egress_ack_version: str | None = None
 
+    # Learned governance is opt-in and shadow-only until a later phase.
+    cusp_shadow_mode_enabled: bool = False
+    cusp_shadow_model_artifact: Path | None = None
+    cusp_shadow_model_name: str = "cusp-stopping-risk"
+    cusp_shadow_model_version: str = ""
+
     # Optional observability endpoints.
     otel_exporter_otlp_endpoint: AnyHttpUrl | None = None
     sentry_dsn: AnyHttpUrl | None = None
@@ -197,6 +203,19 @@ class Settings(BaseSettings):
             ):
                 raise ValueError(
                     "production dashboard authentication requires OIDC issuer, audience, and JWKS URL"
+                )
+
+        if self.cusp_shadow_mode_enabled:
+            if (
+                self.cusp_shadow_model_artifact is None
+                or not self.cusp_shadow_model_artifact.is_file()
+            ):
+                raise ValueError(
+                    "CUSP_SHADOW_MODEL_ARTIFACT must point to a readable model when shadow mode is enabled"
+                )
+            if not self.cusp_shadow_model_version.strip():
+                raise ValueError(
+                    "CUSP_SHADOW_MODEL_VERSION is required when shadow mode is enabled"
                 )
 
         return self

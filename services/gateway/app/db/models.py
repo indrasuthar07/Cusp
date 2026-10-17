@@ -470,6 +470,45 @@ class Decision(Base):
     action: Mapped[ActionAttempt] = relationship(back_populates="decisions")
 
 
+class ShadowRecommendation(Base):
+    """Append-only learned recommendation; never authoritative for execution."""
+
+    __tablename__ = "shadow_recommendations"
+    __table_args__ = (
+        UniqueConstraint(
+            "action_id", "model_name", "model_version", name="uq_shadow_action_model"
+        ),
+        Index("ix_shadow_recommendations_org_created", "org_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    public_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
+    )
+    org_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    session_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    action_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("action_attempts.id", ondelete="CASCADE"), nullable=False
+    )
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    recommended_verdict: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    deterministic_verdict: Mapped[DecisionVerdict] = mapped_column(
+        SAEnum(DecisionVerdict, name="decision_verdict", create_type=False),
+        nullable=False,
+    )
+    applied: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    feature_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # Audit Events (append-only)
 class AuditEvent(Base):
     __tablename__ = "audit_events"
