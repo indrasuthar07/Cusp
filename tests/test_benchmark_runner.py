@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from ml.benchmarks.features import export_features_and_labels
+from ml.benchmarks.registry import register_training_run
 from ml.benchmarks.runner import (
     BenchmarkConfig,
     run_benchmark,
@@ -152,3 +153,67 @@ def test_training_reports_missing_optional_dependencies(tmp_path: Path) -> None:
         # The dependency-aware path is installed in this environment; the
         # fixture intentionally has no split files, so input validation wins.
         pass
+
+
+def test_local_registry_stores_hashes_and_model_card(tmp_path: Path) -> None:
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    model = inputs / "stopping_model.pkl"
+    evaluation = inputs / "evaluation_report.json"
+    split = inputs / "split_manifest.json"
+    features = inputs / "feature_label_manifest.json"
+    model.write_bytes(b"model-bytes")
+    evaluation.write_text(
+        json.dumps(
+            {
+                "model_type": "xgboost_binary_logistic",
+                "calibration": "logistic_platt_on_validation",
+                "feature_names": ["loop_score"],
+                "metrics": {"precision": 0.5, "recall": 0.25},
+            }
+        ),
+        encoding="utf-8",
+    )
+    split.write_text(
+        json.dumps(
+            {
+                "split_schema_version": "1.0.0",
+                "seed": 7,
+                "group_field": "task_id",
+                "row_counts": {"train": 2, "validation": 1, "test": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    features.write_text(
+        json.dumps(
+            {"feature_schema_version": "1.0.0", "label_schema_version": "1.0.0"}
+        ),
+        encoding="utf-8",
+    )
+    registration = register_training_run(
+        registry_dir=tmp_path / "registry",
+        model_name="cusp-stopping-risk",
+        model_version="1.0.0",
+        model_artifact=model,
+        evaluation_report=evaluation,
+        split_manifest=split,
+        feature_label_manifest=features,
+    )
+    version_dir = tmp_path / "registry" / "cusp-stopping-risk" / "1.0.0"
+    assert registration["model_card"]["shadow_only"] is True
+    assert registration["code"]["git_commit"]
+    assert (version_dir / "MODEL_CARD.md").exists()
+    assert (version_dir / "registration.json").exists()
+    assert (tmp_path / "registry" / "registry.json").exists()
+    assert "Intended use" in (version_dir / "MODEL_CARD.md").read_text(encoding="utf-8")
+    again = register_training_run(
+        registry_dir=tmp_path / "registry",
+        model_name="cusp-stopping-risk",
+        model_version="1.0.0",
+        model_artifact=model,
+        evaluation_report=evaluation,
+        split_manifest=split,
+        feature_label_manifest=features,
+    )
+    assert again == registration

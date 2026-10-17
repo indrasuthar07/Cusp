@@ -1,0 +1,118 @@
+{
+  "artifacts": {
+    "evaluation": {
+      "bytes": 1391,
+      "file": "artifacts/evaluation_report.json",
+      "sha256": "8d784e96d6a3ad466e9cd9e6fbaa0b7344ad1f687af855385a7a8df085a6a49e"
+    },
+    "feature_label_manifest": {
+      "bytes": 563,
+      "file": "artifacts/feature_label_manifest.json",
+      "sha256": "6d92db5197a4ee37b11d69e37f14f533847ea9ee95ad0671850693334d3403e7"
+    },
+    "model": {
+      "bytes": 79639,
+      "file": "artifacts/stopping_model.pkl",
+      "sha256": "a964ce59048b286e3bbfcce4b20e8840dd59ad3cc3fed92b7451752d927b4051"
+    },
+    "split_manifest": {
+      "bytes": 1004,
+      "file": "artifacts/split_manifest.json",
+      "sha256": "94cce8cb7a444ee5c93342c42608e629bfcff50c495b8ad7234f3a3d055e8043"
+    }
+  },
+  "code": {
+    "git_commit": "68de9bf883dfceb1684f9fd6e720d747d83b1478",
+    "git_diff_sha256": "063889ab4650af9fb7a8ca494af90895acbe6f8a1ddbff2e679d3e115b92900f",
+    "git_dirty": true
+  },
+  "data": {
+    "feature_schema_version": "1.0.0",
+    "group_field": "task_id",
+    "label_schema_version": "1.0.0",
+    "row_counts": {
+      "test": 29,
+      "train": 47,
+      "validation": 15
+    },
+    "split_schema_version": "1.0.0",
+    "split_seed": 20261017
+  },
+  "metrics": {
+    "accuracy": 0.896551724137931,
+    "baseline_confusion_matrix": [
+      [
+        26,
+        0
+      ],
+      [
+        0,
+        3
+      ]
+    ],
+    "baseline_precision": 1.0,
+    "baseline_recall": 1.0,
+    "brier_score": 0.09384380280971527,
+    "confusion_matrix": [
+      [
+        26,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    "cost_impact": {
+      "baseline_stop_cost_micro_usd": 7000.0,
+      "predicted_stop_cost_micro_usd": 0
+    },
+    "latency_ms": {
+      "inference_latency_ms": 0.8762999786995351,
+      "test_mean_latency_ms": 351.7241379310345
+    },
+    "precision": 0.0,
+    "recall": 0.0
+  },
+  "model": {
+    "calibration": "logistic_platt_on_validation",
+    "feature_names": [
+      "action_type",
+      "diff_bytes",
+      "embedding_available",
+      "estimated_cost_micro_usd",
+      "input_tokens",
+      "latency_ms",
+      "loop_score",
+      "output_tokens",
+      "provider_kind",
+      "run_spent_micro_usd_before",
+      "semantic_similarity",
+      "tests_failed",
+      "tests_passed"
+    ],
+    "type": "xgboost_binary_logistic"
+  },
+  "model_card": {
+    "intended_use": "Shadow-mode stopping-risk recommendations only",
+    "limitations": [
+      "Not approved to change execution outcomes.",
+      "Evaluation is limited to task-disjoint deterministic scenarios.",
+      "Provider and repository distributions may not represent production traffic."
+    ],
+    "shadow_only": true
+  },
+  "model_name": "cusp-stopping-risk",
+  "model_version": "1.0.0",
+  "registered_at": "2026-10-17T13:12:28.928718+00:00",
+  "registry_schema_version": "1.0.0",
+  "runtime": {
+    "packages": {
+      "numpy": "2.5.4",
+      "scikit-learn": "1.9.1",
+      "xgboost": "3.4.1"
+    },
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.13"
+  }
+}

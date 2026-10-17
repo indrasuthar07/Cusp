@@ -73,6 +73,25 @@ confusion matrices, deterministic-policy baseline comparison, cost impact, and
 latency. The ML extra is optional; offline benchmark and gateway tests do not
 install or import it.
 
+Register a trained run in the local immutable registry:
+
+```powershell
+uv run python ml/register_model.py `
+  --registry-dir ml/benchmarks/registry `
+  --model-version 1.0.0 `
+  --model-artifact ml/benchmarks/model/stopping_model.pkl `
+  --evaluation-report ml/benchmarks/model/evaluation_report.json `
+  --split-manifest ml/benchmarks/splits/split_manifest.json `
+  --feature-label-manifest ml/benchmarks/results/feature_label_manifest.json
+```
+
+Each version stores the model, reports, manifests, SHA-256 hashes, Git commit
+and dirty-state metadata, runtime/package versions, split configuration, and a
+`MODEL_CARD.md`. Versions are immutable: registering different content under an
+existing version fails. The generated card marks the model as shadow-only and
+documents intended use, metrics, training data, limitations, and reproducibility
+information.
+
 Energy is an estimate calculated from `--wattage` and action latency. Pass
 `--wattage 0` to report energy as unavailable. This estimate must not be
 presented as measured hardware telemetry.

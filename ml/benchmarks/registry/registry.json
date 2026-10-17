@@ -1,0 +1,11 @@
+{
+  "models": [
+    {
+      "model_name": "cusp-stopping-risk",
+      "model_version": "1.0.0",
+      "path": "cusp-stopping-risk/1.0.0",
+      "registration_sha256": "02b73958ea3143e63780c9525444cbb77ac6ec4415eacd5b50086dacfe5fd0b5"
+    }
+  ],
+  "registry_schema_version": "1.0.0"
+}

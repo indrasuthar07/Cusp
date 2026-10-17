@@ -7,6 +7,7 @@ from .features import (
     feature_vector,
     label_record,
 )
+from .registry import REGISTRY_SCHEMA_VERSION, register_training_run
 from .runner import (
     BenchmarkConfig,
     BenchmarkRecord,
@@ -25,6 +26,7 @@ from .training import TrainingDependencyError, train_stopping_model
 __all__ = [
     "FEATURE_SCHEMA_VERSION",
     "LABEL_SCHEMA_VERSION",
+    "REGISTRY_SCHEMA_VERSION",
     "BenchmarkConfig",
     "BenchmarkRecord",
     "BenchmarkReport",
@@ -34,6 +36,7 @@ __all__ = [
     "export_features_and_labels",
     "feature_vector",
     "label_record",
+    "register_training_run",
     "run_benchmark",
     "run_scenario_benchmark",
     "split_feature_label_files",
