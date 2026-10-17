@@ -1,5 +1,5 @@
 {
-  "feature_sha256": "a06a5430cba7ed37da0ac7a572401843d933835b327c87e42f91d8d2ae8a3197",
+  "feature_sha256": "4d5b44c72b1c3dc8c4fabb67ccb90ef7736323894d0b6772279cd8f7603706f6",
   "fractions": {
     "group_field": "task_id",
     "seed": 20261017,
@@ -9,8 +9,9 @@
   },
   "group_field": "task_id",
   "group_leakage": {
-    "train": [],
-    "validation": []
+    "train_test": [],
+    "train_validation": [],
+    "validation_test": []
   },
   "groups": {
     "test": [

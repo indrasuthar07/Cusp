@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-import pytest
 from ml.datasets.generator import generate_dataset, run_scenario
 from ml.datasets.scenarios import (
     FEATURE_SCHEMA_VERSION,
     LABEL_SCHEMA_VERSION,
     SCENARIOS,
-    get_scenario,
     get_scenario_ids,
     get_scenarios_by_task,
     get_task_ids,

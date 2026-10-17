@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 
 revision: str = "004_shadow_recommendations"
 down_revision: str | None = "003_governance_decision_state"
@@ -13,7 +13,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    decision_verdict = sa.Enum(
+    # Reuse the PostgreSQL enum created by migration 001.  The generic
+    # SQLAlchemy Enum ignores create_type=False when attached to create_table.
+    decision_verdict = ENUM(
         "allow", "downgrade", "pause", "escalate", "kill",
         name="decision_verdict", create_type=False,
     )

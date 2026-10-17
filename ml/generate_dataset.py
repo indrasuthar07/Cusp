@@ -1,7 +1,6 @@
 """CLI entrypoint to generate Cusp Phase 7 deterministic dataset and manifest."""
 
 import argparse
-import json
 import sys
 from pathlib import Path
 

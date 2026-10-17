@@ -21,6 +21,7 @@ from app.governance.engine import (
     PolicyResolver,
     ProgressSignal,
 )
+
 from ml.datasets.scenarios import (
     FEATURE_SCHEMA_VERSION,
     LABEL_SCHEMA_VERSION,
@@ -142,20 +143,21 @@ def generate_dataset(output_dir: Path) -> dict[str, Any]:
     for scenario in SCENARIOS:
         records = run_scenario(scenario)
         all_records.extend(records)
-        scenarios_summary.append({
-            "scenario_id": scenario.scenario_id,
-            "task_id": scenario.task_id,
-            "provider_kind": scenario.provider_kind,
-            "description": scenario.description,
-            "num_actions": len(records),
-            "run_outcome": scenario.run_outcome,
-            "verified_success": scenario.verified_success,
-        })
+        scenarios_summary.append(
+            {
+                "scenario_id": scenario.scenario_id,
+                "task_id": scenario.task_id,
+                "provider_kind": scenario.provider_kind,
+                "description": scenario.description,
+                "num_actions": len(records),
+                "run_outcome": scenario.run_outcome,
+                "verified_success": scenario.verified_success,
+            }
+        )
 
     # Write JSONL
     with open(actions_file, "w", encoding="utf-8") as f:
-        for rec in all_records:
-            f.write(json.dumps(rec, sort_keys=True) + "\n")
+        f.writelines(json.dumps(rec, sort_keys=True) + "\n" for rec in all_records)
 
     # Compute hash of data file
     hasher = hashlib.sha256()
@@ -171,16 +173,16 @@ def generate_dataset(output_dir: Path) -> dict[str, Any]:
         "label_schema_version": LABEL_SCHEMA_VERSION,
         "total_scenarios": len(SCENARIOS),
         "total_actions": len(all_records),
-        "unique_tasks": sorted(list({s["task_id"] for s in scenarios_summary})),
+        "unique_tasks": sorted({s["task_id"] for s in scenarios_summary}),
         "data_file": actions_file.name,
         "sha256": data_sha256,
         "verdict_distribution": {
             v: sum(1 for r in all_records if r["verdict"] == v)
-            for v in {"allow", "downgrade", "pause", "escalate", "kill"}
+            for v in ("allow", "downgrade", "pause", "escalate", "kill")
         },
         "run_outcome_distribution": {
             o: sum(1 for s in scenarios_summary if s["run_outcome"] == o)
-            for o in sorted(list({s["run_outcome"] for s in scenarios_summary}))
+            for o in sorted({s["run_outcome"] for s in scenarios_summary})
         },
         "scenarios": scenarios_summary,
     }

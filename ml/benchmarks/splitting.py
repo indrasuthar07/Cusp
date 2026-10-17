@@ -116,12 +116,15 @@ def split_feature_label_files(
     for groups_for_split in split_groups.values():
         groups_for_split.sort()
     overlap = {
-        left: sorted(set(split_groups[left]) & set(split_groups[right]))
-        for left, right in (
-            ("train", "validation"),
-            ("train", "test"),
-            ("validation", "test"),
-        )
+        "train_validation": sorted(
+            set(split_groups["train"]) & set(split_groups["validation"])
+        ),
+        "train_test": sorted(
+            set(split_groups["train"]) & set(split_groups["test"])
+        ),
+        "validation_test": sorted(
+            set(split_groups["validation"]) & set(split_groups["test"])
+        ),
     }
     if any(overlap.values()):
         raise AssertionError("group leakage detected while creating split")

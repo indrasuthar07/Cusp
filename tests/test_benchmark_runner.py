@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any, Self
@@ -141,6 +142,11 @@ def test_task_disjoint_split_is_reproducible_and_leak_free(tmp_path: Path) -> No
     assert not set(groups["train"]) & set(groups["validation"])
     assert not set(groups["train"]) & set(groups["test"])
     assert not set(groups["validation"]) & set(groups["test"])
+    assert first.manifest["group_leakage"] == {
+        "train_validation": [],
+        "train_test": [],
+        "validation_test": [],
+    }
     assert sum(first.manifest["row_counts"].values()) == 91
 
 
@@ -153,6 +159,34 @@ def test_training_reports_missing_optional_dependencies(tmp_path: Path) -> None:
         # The dependency-aware path is installed in this environment; the
         # fixture intentionally has no split files, so input validation wins.
         pass
+
+
+def test_held_out_evaluation_is_leak_free_and_separates_cost_evidence(
+    tmp_path: Path,
+) -> None:
+    if any(
+        importlib.util.find_spec(package) is None
+        for package in ("numpy", "sklearn", "xgboost")
+    ):
+        pytest.skip("optional ML dependencies are not installed")
+    report = run_benchmark(SCENARIOS, BenchmarkConfig(provider="fake"))
+    source = tmp_path / "source"
+    export_features_and_labels(report, source)
+    split_dir = tmp_path / "splits"
+    split_feature_label_files(
+        source / "feature_vectors.jsonl",
+        source / "labels.jsonl",
+        split_dir,
+        SplitConfig(seed=20261017),
+    )
+    evaluation = train_stopping_model(split_dir, tmp_path / "model")
+    comparison = evaluation["comparison"]
+    assert evaluation["held_out"] is True
+    assert evaluation["split_integrity"]["train_test_overlap"] == []
+    assert comparison["latency"]["meets_hot_path_target"] is True
+    assert comparison["cost_impact"]["actual_provider_spend_reduction_available"] is False
+    assert comparison["cost_impact"]["learned_actual_provider_spend_avoided_micro_usd"] is None
+    assert (tmp_path / "model" / "held_out_evaluation_report.json").is_file()
 
 
 def test_local_registry_stores_hashes_and_model_card(tmp_path: Path) -> None:

@@ -8,9 +8,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from ml.datasets.scenarios import FEATURE_SCHEMA_VERSION
+
 from .runner import BenchmarkRecord, BenchmarkReport
 
-FEATURE_SCHEMA_VERSION = "1.0.0"
 LABEL_SCHEMA_VERSION = "1.0.0"
 
 
@@ -34,6 +35,9 @@ def feature_vector(record: BenchmarkRecord) -> dict[str, Any]:
         "input_tokens": record.input_tokens,
         "output_tokens": record.output_tokens,
         "latency_ms": record.latency_ms,
+        "virtual_cost_micro_usd": record.virtual_cost_micro_usd,
+        "provider_cost_micro_usd": record.provider_cost_micro_usd,
+        "cost_provenance": record.cost_provenance,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
     }
 

@@ -61,17 +61,25 @@ hashes, and pairwise leakage checks. Re-running with the same seed and inputs is
 idempotent. Train the optional calibrated XGBoost model with:
 
 ```powershell
-uv sync --extra ml
+uv sync --all-packages --all-groups --extra ml
 uv run python ml/train_model.py `
   --split-dir ml/benchmarks/splits `
   --output-dir ml/benchmarks/model
 ```
 
-Training fits XGBoost on train groups, fits Platt calibration on validation
-groups, and reports held-out precision, recall, Brier calibration score,
-confusion matrices, deterministic-policy baseline comparison, cost impact, and
-latency. The ML extra is optional; offline benchmark and gateway tests do not
-install or import it.
+Training fits XGBoost on train groups and Platt calibration on validation
+groups. It then creates both `evaluation_report.json` and the explicit
+`held_out_evaluation_report.json`. The held-out report records precision,
+recall, Brier score, expected calibration error, confusion matrices,
+deterministic-policy comparison, recommendation agreement, and inference
+latency against the 10 ms hot-path target. It verifies the split manifest and
+fails if a task or repository group appears in both train and test.
+
+Virtual-cost avoidance is always reported as a projection. Actual provider
+spend avoidance is reported separately and is `null` when a stopped action has
+no provider-reported cost; missing provider charges are never converted to zero.
+The ML extra is optional; offline benchmark and gateway tests do not install or
+import it.
 
 Register a trained run in the local immutable registry:
 

@@ -33,13 +33,13 @@ Increment LABEL_SCHEMA_VERSION when changing label definitions or sentinel value
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
-# Schema versioning 
-FEATURE_SCHEMA_VERSION = "1.0.0"
+# Schema versioning
+# 1.1.0 adds virtual/provider cost provenance to benchmark feature exports.
+FEATURE_SCHEMA_VERSION = "1.1.0"
 LABEL_SCHEMA_VERSION = "1.0.0"
 
-# Stable task identifiers 
+# Stable task identifiers
 TASK_A = "task-A-fix-auth-bug"
 TASK_B = "task-B-refactor-api"
 TASK_C = "task-C-budget-constraint"
@@ -50,7 +50,7 @@ TASK_G = "task-G-ci-setup"
 TASK_H = "task-H-db-migration"
 
 
-# Data models 
+# Data models
 
 @dataclass(frozen=True)
 class ActionStep:
@@ -78,9 +78,9 @@ class ActionStep:
     tests_passed: int = 0
     tests_failed: int = 0
     elapsed_ms: int = 200
-    semantic_similarity: Optional[float] = None
+    semantic_similarity: float | None = None
     embedding_available: bool = False
-    provider_error_code: Optional[str] = None
+    provider_error_code: str | None = None
     data_classification: str = "internal"
     expected_verdict: str = "allow"
     action_outcome: str = "completed"
@@ -115,7 +115,7 @@ class ScenarioDefinition:
     action_sequence: list[ActionStep] = field(default_factory=list)
 
 
-# Helper 
+# Helper
 
 def _step(
     action_type: str,
@@ -128,9 +128,9 @@ def _step(
     tests_passed: int = 0,
     tests_failed: int = 0,
     elapsed_ms: int = 200,
-    semantic_similarity: Optional[float] = None,
+    semantic_similarity: float | None = None,
     embedding_available: bool = False,
-    provider_error_code: Optional[str] = None,
+    provider_error_code: str | None = None,
     data_classification: str = "internal",
     expected_verdict: str = "allow",
     action_outcome: str = "completed",

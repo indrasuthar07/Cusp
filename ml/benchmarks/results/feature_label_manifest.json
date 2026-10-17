@@ -1,8 +1,8 @@
 {
   "agent_declared_success_used": false,
   "feature_file": "feature_vectors.jsonl",
-  "feature_schema_version": "1.0.0",
-  "feature_sha256": "a06a5430cba7ed37da0ac7a572401843d933835b327c87e42f91d8d2ae8a3197",
+  "feature_schema_version": "1.1.0",
+  "feature_sha256": "4d5b44c72b1c3dc8c4fabb67ccb90ef7736323894d0b6772279cd8f7603706f6",
   "ground_truth": [
     "policy_verdict",
     "action_outcome",

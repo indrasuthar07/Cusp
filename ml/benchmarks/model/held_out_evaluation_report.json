@@ -1,0 +1,163 @@
+{
+  "artifact": "stopping_model.pkl",
+  "artifact_sha256": "4e795b89ea23664c9d4a6627bb74ac2df243a256bf81b102eb0bbe6eb0c12e73",
+  "calibration": "logistic_platt_on_validation",
+  "comparison": {
+    "cost_impact": {
+      "actual_provider_spend_reduction_available": false,
+      "actual_provider_spend_reduction_complete": {
+        "deterministic": false,
+        "learned": false
+      },
+      "deterministic_actual_provider_spend_avoided_micro_usd": null,
+      "deterministic_projected_virtual_cost_avoided_micro_usd": 7000.0,
+      "learned_actual_provider_spend_avoided_micro_usd": null,
+      "learned_projected_virtual_cost_avoided_micro_usd": 0
+    },
+    "deterministic": {
+      "accuracy": 1.0,
+      "brier_score": 0.0,
+      "confusion_matrix": [
+        [
+          26,
+          0
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "expected_calibration_error": 0.0,
+      "false_stop_rate": 0.0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "latency": {
+      "hot_path_target_ms": 10.0,
+      "inference_latency_ms": 0.5923999706283212,
+      "meets_hot_path_target": true,
+      "test_mean_latency_ms": 351.7241379310345
+    },
+    "learned": {
+      "accuracy": 0.896551724137931,
+      "brier_score": 0.09379968792200089,
+      "confusion_matrix": [
+        [
+          26,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "expected_calibration_error": 0.03661874347719653,
+      "false_stop_rate": 0.0,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "recommendation_agreement_rate": 0.896551724137931,
+    "recommendation_disagreement_count": 3
+  },
+  "feature_names": [
+    "action_type",
+    "cost_provenance",
+    "diff_bytes",
+    "embedding_available",
+    "estimated_cost_micro_usd",
+    "input_tokens",
+    "latency_ms",
+    "loop_score",
+    "output_tokens",
+    "provider_cost_micro_usd",
+    "provider_kind",
+    "run_spent_micro_usd_before",
+    "semantic_similarity",
+    "tests_failed",
+    "tests_passed",
+    "virtual_cost_micro_usd"
+  ],
+  "feature_schema_version": "1.1.0",
+  "held_out": true,
+  "label_schema_version": "1.0.0",
+  "metrics": {
+    "cost_impact": {
+      "actual_provider_spend_reduction_available": false,
+      "actual_provider_spend_reduction_complete": {
+        "deterministic": false,
+        "learned": false
+      },
+      "deterministic_actual_provider_spend_avoided_micro_usd": null,
+      "deterministic_projected_virtual_cost_avoided_micro_usd": 7000.0,
+      "learned_actual_provider_spend_avoided_micro_usd": null,
+      "learned_projected_virtual_cost_avoided_micro_usd": 0
+    },
+    "deterministic": {
+      "accuracy": 1.0,
+      "brier_score": 0.0,
+      "confusion_matrix": [
+        [
+          26,
+          0
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "expected_calibration_error": 0.0,
+      "false_stop_rate": 0.0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "latency": {
+      "hot_path_target_ms": 10.0,
+      "inference_latency_ms": 0.5923999706283212,
+      "meets_hot_path_target": true,
+      "test_mean_latency_ms": 351.7241379310345
+    },
+    "learned": {
+      "accuracy": 0.896551724137931,
+      "brier_score": 0.09379968792200089,
+      "confusion_matrix": [
+        [
+          26,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "expected_calibration_error": 0.03661874347719653,
+      "false_stop_rate": 0.0,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "recommendation_agreement_rate": 0.896551724137931,
+    "recommendation_disagreement_count": 3
+  },
+  "model_type": "xgboost_binary_logistic",
+  "selection": {
+    "note": "The held-out test split is used only for final evaluation.",
+    "used_for_model_selection": false
+  },
+  "split_integrity": {
+    "group_field": "task_id",
+    "passed": true,
+    "test_groups": [
+      "task-D-failure-modes",
+      "task-E-test-suite"
+    ],
+    "train_groups": [
+      "task-B-refactor-api",
+      "task-C-budget-constraint",
+      "task-F-dep-update",
+      "task-G-ci-setup",
+      "task-H-db-migration"
+    ],
+    "train_test_overlap": []
+  },
+  "test_rows": 29,
+  "training_schema_version": "1.0.0"
+}
