@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Self
 from unittest.mock import patch
 
+from ml.benchmarks.features import export_features_and_labels
 from ml.benchmarks.runner import (
     BenchmarkConfig,
     run_benchmark,
@@ -78,3 +79,39 @@ def test_report_writer_hashes_jsonl(tmp_path: Path) -> None:
     assert (tmp_path / "benchmark_report.json").exists()
     assert summary["records_sha256"]
     assert len(records.read_text(encoding="utf-8").splitlines()) == len(report.records)
+    assert (tmp_path / "feature_vectors.jsonl").exists()
+    assert (tmp_path / "labels.jsonl").exists()
+
+
+def test_hosted_profiles_require_consent_and_key() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="hosted_egress_consent"):
+        BenchmarkConfig(provider="groq", hosted_api_key="secret")
+    with pytest.raises(ValueError, match="API key"):
+        BenchmarkConfig(provider="groq", hosted_egress_consent=True)
+
+
+def test_opted_in_groq_profile_does_not_export_api_key(tmp_path: Path) -> None:
+    payload = {
+        "choices": [{"message": {"content": "hosted result"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 2, "completion_tokens": 3},
+    }
+    config = BenchmarkConfig(
+        provider="groq",
+        hosted_api_key="super-secret",
+        hosted_model="llama-3.1",
+        hosted_egress_consent=True,
+    )
+    with patch(
+        "cusp.providers.hosted.adapter.urlopen", return_value=_Response(payload)
+    ):
+        report = run_benchmark(SCENARIOS[:1], config)
+    summary = export_features_and_labels(report, tmp_path)
+    assert report.records[0].input_tokens == 2
+    assert report.records[0].benchmark_mode == "hosted_opt_in"
+    exported = "\n".join(
+        path.read_text(encoding="utf-8") for path in tmp_path.iterdir()
+    )
+    assert "super-secret" not in exported
+    assert summary["agent_declared_success_used"] is False

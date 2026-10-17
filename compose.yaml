@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - default
 
   redis:
     image: redis:7
@@ -26,6 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - default
 
   gateway:
     build:
@@ -46,6 +50,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - default
+    restart: on-failure:3
 
   worker:
     build:
@@ -61,6 +68,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - default
 
   dashboard:
     build:
@@ -73,7 +82,13 @@ services:
     depends_on:
       gateway:
         condition: service_started
+    networks:
+      - default
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  default:
+    driver: bridge

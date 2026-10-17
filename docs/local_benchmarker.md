@@ -28,6 +28,25 @@ Ollama is the only network target in this runner. Hosted adapters are never
 constructed. If Ollama is unavailable, records contain a bounded provider error
 and the deterministic policy result remains visible; no secret is required.
 
+Hosted profiles are intentionally opt-in and require both a key supplied through
+an environment variable and an explicit consent flag. For example:
+
+```powershell
+$env:GROQ_API_KEY = "..."
+uv run python ml/run_benchmark.py --provider groq --hosted-model llama-3.1-8b-instant `
+  --api-key-env GROQ_API_KEY --hosted-egress-consent
+```
+
+Gemini and Hugging Face use the same pattern with `--provider gemini` or
+`--provider huggingface`. The key is read only in memory, excluded from config
+representation, and never written to records, manifests, or logs. Hosted
+profiles are not used by offline tests.
+
+Every report also exports `feature_vectors.jsonl`, `labels.jsonl`, and
+`feature_label_manifest.json`. Feature vectors contain governance and semantic
+signals only. Labels include deterministic policy outcomes and verified run
+outcomes; agent-declared success is explicitly excluded from ground truth.
+
 Energy is an estimate calculated from `--wattage` and action latency. Pass
 `--wattage 0` to report energy as unavailable. This estimate must not be
 presented as measured hardware telemetry.

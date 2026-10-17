@@ -11,13 +11,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from cusp.providers.base import AdapterError, ProviderAdapter, ProviderRequest
 from cusp.providers.fake import DeterministicFakeAdapter, FakeScenario
+from cusp.providers.hosted import (
+    GeminiAdapter,
+    GroqAdapter,
+    HostedProviderConfig,
+    HuggingFaceAdapter,
+)
 from cusp.providers.ollama import OllamaAdapter, OllamaConfig
 
 from ml.datasets.generator import run_scenario
@@ -31,18 +38,34 @@ class BenchmarkConfig:
     provider: str = "fake"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
+    hosted_model: str = "configured-model"
+    hosted_base_url: str = ""
+    hosted_api_key: str = field(default="", repr=False)
+    hosted_egress_consent: bool = False
     timeout_seconds: float = 30.0
     host_wattage_watts: float = 65.0
 
     def __post_init__(self) -> None:
-        if self.provider not in {"fake", "ollama"}:
-            raise ValueError("benchmark provider must be fake or ollama")
+        hosted = {"gemini", "groq", "huggingface"}
+        if self.provider not in {"fake", "ollama", *hosted}:
+            raise ValueError(
+                "benchmark provider must be fake, ollama, gemini, groq, or huggingface"
+            )
         if self.timeout_seconds <= 0:
             raise ValueError("benchmark timeout_seconds must be positive")
         if self.host_wattage_watts < 0:
             raise ValueError("host_wattage_watts cannot be negative")
         if not self.ollama_model.strip():
             raise ValueError("ollama_model must not be empty")
+        if self.provider in hosted:
+            if not self.hosted_egress_consent:
+                raise ValueError(
+                    "hosted benchmark requires explicit hosted_egress_consent"
+                )
+            if not self.hosted_api_key.strip():
+                raise ValueError("hosted benchmark API key is required")
+            if not self.hosted_model.strip():
+                raise ValueError("hosted_model must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +93,14 @@ class BenchmarkRecord:
     run_outcome: str
     verified_success: bool
     benchmark_mode: str
+    estimated_cost_micro_usd: int
+    diff_bytes: int
+    tests_passed: int
+    tests_failed: int
+    semantic_similarity: float | None
+    embedding_available: bool
+    loop_score: float | None
+    run_spent_micro_usd_before: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,13 +141,42 @@ def _adapter_for(
 ) -> ProviderAdapter:
     if config.provider == "fake":
         return _fake_adapter_for(scenario)
-    return OllamaAdapter(
-        OllamaConfig(
-            base_url=config.ollama_base_url,
-            model=config.ollama_model,
-            timeout_seconds=config.timeout_seconds,
+    if config.provider == "ollama":
+        return OllamaAdapter(
+            OllamaConfig(
+                base_url=config.ollama_base_url,
+                model=config.ollama_model,
+                timeout_seconds=config.timeout_seconds,
+            )
         )
+    base_url = (
+        config.hosted_base_url
+        or {
+            "gemini": "https://generativelanguage.googleapis.com",
+            "groq": "https://api.groq.com/openai/v1",
+            "huggingface": "https://router.huggingface.co/v1",
+        }[config.provider]
     )
+    hosted = HostedProviderConfig(
+        api_key=config.hosted_api_key,
+        model=config.hosted_model,
+        base_url=base_url,
+        timeout_seconds=config.timeout_seconds,
+    )
+    if config.provider == "gemini":
+        adapter: ProviderAdapter = GeminiAdapter(hosted)
+    elif config.provider == "groq":
+        adapter = GroqAdapter(hosted)
+    else:
+        adapter = HuggingFaceAdapter(hosted)
+    adapter.validate_profile(
+        {
+            "provider": config.provider,
+            "privacy_class": "hosted_consent_required",
+            "requires_hosted_egress_ack": config.hosted_egress_consent,
+        }
+    )
+    return adapter
 
 
 def _prompt(scenario: ScenarioDefinition, step: ActionStep, sequence: int) -> str:
@@ -173,6 +233,8 @@ def run_scenario_benchmark(
                         model=(
                             settings.ollama_model
                             if settings.provider == "ollama"
+                            else settings.hosted_model
+                            if settings.provider != "fake"
                             else "deterministic"
                         ),
                     )
@@ -196,9 +258,13 @@ def run_scenario_benchmark(
                 task_id=scenario.task_id,
                 sequence=sequence,
                 provider_kind=settings.provider,
-                model=settings.ollama_model
-                if settings.provider == "ollama"
-                else "deterministic",
+                model=(
+                    settings.ollama_model
+                    if settings.provider == "ollama"
+                    else settings.hosted_model
+                    if settings.provider not in {"fake"}
+                    else "deterministic"
+                ),
                 action_type=step.action_type,
                 policy_verdict=policy["verdict"],
                 policy_reason_code=policy["reason_code"],
@@ -216,7 +282,21 @@ def run_scenario_benchmark(
                 verified_success=scenario.verified_success,
                 benchmark_mode="offline"
                 if settings.provider == "fake"
-                else "ollama_local",
+                else "ollama_local"
+                if settings.provider == "ollama"
+                else "hosted_opt_in",
+                estimated_cost_micro_usd=step.estimated_cost_micro_usd,
+                diff_bytes=step.diff_bytes,
+                tests_passed=step.tests_passed,
+                tests_failed=step.tests_failed,
+                semantic_similarity=step.semantic_similarity,
+                embedding_available=step.embedding_available,
+                loop_score=(
+                    float(policy["loop_score"])
+                    if policy["loop_score"] is not None
+                    else None
+                ),
+                run_spent_micro_usd_before=int(policy["run_spent_micro_usd_before"]),
             )
         )
     return records
@@ -245,9 +325,13 @@ def run_benchmark(
     return BenchmarkReport(
         benchmark_version="1.0.0",
         provider=settings.provider,
-        model=settings.ollama_model
-        if settings.provider == "ollama"
-        else "deterministic",
+        model=(
+            settings.ollama_model
+            if settings.provider == "ollama"
+            else settings.hosted_model
+            if settings.provider != "fake"
+            else "deterministic"
+        ),
         total_actions=len(all_records),
         completed_actions=sum(
             record.action_outcome == "completed" for record in all_records
@@ -279,9 +363,13 @@ def write_report(report: BenchmarkReport, output_dir: Path) -> dict[str, Any]:
     summary.pop("records", None)
     summary["records_file"] = records_path.name
     summary["records_sha256"] = digest
+    summary["feature_label_manifest"] = "feature_label_manifest.json"
     report_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    from .features import export_features_and_labels
+
+    export_features_and_labels(report, output_dir)
     return summary
 
 
@@ -289,9 +377,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run Cusp offline or local-Ollama benchmarks"
     )
-    parser.add_argument("--provider", choices=("fake", "ollama"), default="fake")
+    parser.add_argument(
+        "--provider",
+        choices=("fake", "ollama", "gemini", "groq", "huggingface"),
+        default="fake",
+    )
     parser.add_argument("--ollama-url", default="http://localhost:11434")
     parser.add_argument("--ollama-model", default="llama3.2")
+    parser.add_argument("--hosted-model", default="configured-model")
+    parser.add_argument("--hosted-url", default="")
+    parser.add_argument("--hosted-egress-consent", action="store_true")
+    parser.add_argument(
+        "--api-key-env",
+        default="",
+        help="Environment variable containing the hosted API key (never written to output)",
+    )
     parser.add_argument(
         "--output-dir", type=Path, default=Path("ml/benchmarks/results")
     )
@@ -301,6 +401,10 @@ def main() -> None:
         provider=args.provider,
         ollama_base_url=args.ollama_url,
         ollama_model=args.ollama_model,
+        hosted_model=args.hosted_model,
+        hosted_base_url=args.hosted_url,
+        hosted_api_key=os.environ.get(args.api_key_env, "") if args.api_key_env else "",
+        hosted_egress_consent=args.hosted_egress_consent,
         host_wattage_watts=args.wattage,
     )
     summary = write_report(run_benchmark(config=config), args.output_dir)
