@@ -1,0 +1,17 @@
+{
+  "benchmark_version": "1.0.0",
+  "completed_actions": 80,
+  "failed_actions": 11,
+  "feature_label_manifest": "feature_label_manifest.json",
+  "model": "deterministic",
+  "provider": "fake",
+  "records_file": "benchmark_records.jsonl",
+  "records_sha256": "91308660effea9403624bdadfa0cefb30f642cb409b5df00b6e5342e72768af7",
+  "total_actions": 91,
+  "total_energy_wh": 0.8723541666666667,
+  "total_input_tokens": 560,
+  "total_latency_ms": 48315,
+  "total_output_tokens": 448,
+  "total_provider_cost_micro_usd": null,
+  "total_virtual_cost_micro_usd": 0
+}

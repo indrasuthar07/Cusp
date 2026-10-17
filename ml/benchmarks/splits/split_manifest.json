@@ -1,0 +1,42 @@
+{
+  "feature_sha256": "4d5b44c72b1c3dc8c4fabb67ccb90ef7736323894d0b6772279cd8f7603706f6",
+  "fractions": {
+    "group_field": "task_id",
+    "seed": 20261017,
+    "test_fraction": 0.2,
+    "train_fraction": 0.6,
+    "validation_fraction": 0.2
+  },
+  "group_field": "task_id",
+  "group_leakage": {
+    "train_test": [],
+    "train_validation": [],
+    "validation_test": []
+  },
+  "groups": {
+    "test": [
+      "task-D-failure-modes",
+      "task-E-test-suite"
+    ],
+    "train": [
+      "task-B-refactor-api",
+      "task-C-budget-constraint",
+      "task-F-dep-update",
+      "task-G-ci-setup",
+      "task-H-db-migration"
+    ],
+    "validation": [
+      "task-A-fix-auth-bug"
+    ]
+  },
+  "label_sha256": "327b9160bb0beca48b03ebd0f8693fa231d13886d5f10e19c7f90f49e27f5312",
+  "row_counts": {
+    "test": 29,
+    "train": 47,
+    "validation": 15
+  },
+  "seed": 20261017,
+  "source_feature_file": "feature_vectors.jsonl",
+  "source_label_file": "labels.jsonl",
+  "split_schema_version": "1.0.0"
+}

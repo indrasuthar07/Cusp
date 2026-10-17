@@ -17,6 +17,7 @@ from app.db.models import (
     PolicyVersion,
     Session,
     SessionStatus,
+    ShadowRecommendation,
 )
 from app.governance.engine import (
     DecisionTokenSigner,
@@ -285,6 +286,53 @@ async def preflight(
             policy_version_id=policy.id if policy else None,
         )
     )
+    # Shadow inference is strictly observational. It is evaluated after the
+    # deterministic decision and cannot mutate the decision or run state.
+    settings = get_settings()
+    if settings.cusp_shadow_mode_enabled and settings.cusp_shadow_model_artifact:
+        try:
+            from app.shadow.predictor import ShadowPredictor
+
+            predictor = ShadowPredictor(
+                settings.cusp_shadow_model_artifact,
+                settings.cusp_shadow_model_name,
+                settings.cusp_shadow_model_version,
+            )
+            prediction = predictor.predict(
+                {
+                    "action_type": body.action_type,
+                    "provider_kind": body.provider_profile.split(":", 1)[0],
+                    "estimated_cost_micro_usd": body.estimated_cost_micro_usd,
+                    "run_spent_micro_usd_before": 0,
+                    "diff_bytes": body.progress.diff_bytes,
+                    "tests_passed": body.progress.tests_passed,
+                    "tests_failed": body.progress.tests_failed,
+                    "semantic_similarity": body.progress.semantic_similarity,
+                    "embedding_available": body.progress.embedding_available,
+                    "loop_score": decision.loop_score,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "latency_ms": body.progress.elapsed_ms,
+                }
+            )
+            db.add(
+                ShadowRecommendation(
+                    org_id=agent.org_id,
+                    session_id=run.id,
+                    action_id=action.id,
+                    model_name=prediction.model_name,
+                    model_version=prediction.model_version,
+                    recommended_verdict=prediction.recommended_verdict,
+                    confidence=prediction.confidence,
+                    deterministic_verdict=DecisionVerdict(decision.verdict),
+                    applied=False,
+                    feature_snapshot=prediction.features,
+                )
+            )
+        except (OSError, ValueError, KeyError, AttributeError, TypeError):
+            # Shadow failure is fail-open for observation but fail-closed for
+            # authority: deterministic governance continues unchanged.
+            pass
     if decision.verdict in {"pause", "escalate"}:
         run.status = SessionStatus.paused
     elif decision.verdict == "kill":

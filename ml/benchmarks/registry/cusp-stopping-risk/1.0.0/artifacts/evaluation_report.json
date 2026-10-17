@@ -1,0 +1,61 @@
+{
+  "artifact": "stopping_model.pkl",
+  "artifact_sha256": "a964ce59048b286e3bbfcce4b20e8840dd59ad3cc3fed92b7451752d927b4051",
+  "calibration": "logistic_platt_on_validation",
+  "feature_names": [
+    "action_type",
+    "diff_bytes",
+    "embedding_available",
+    "estimated_cost_micro_usd",
+    "input_tokens",
+    "latency_ms",
+    "loop_score",
+    "output_tokens",
+    "provider_kind",
+    "run_spent_micro_usd_before",
+    "semantic_similarity",
+    "tests_failed",
+    "tests_passed"
+  ],
+  "feature_schema_version": "1.0.0",
+  "label_schema_version": "1.0.0",
+  "metrics": {
+    "accuracy": 0.896551724137931,
+    "baseline_confusion_matrix": [
+      [
+        26,
+        0
+      ],
+      [
+        0,
+        3
+      ]
+    ],
+    "baseline_precision": 1.0,
+    "baseline_recall": 1.0,
+    "brier_score": 0.09384380280971527,
+    "confusion_matrix": [
+      [
+        26,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    "cost_impact": {
+      "baseline_stop_cost_micro_usd": 7000.0,
+      "predicted_stop_cost_micro_usd": 0
+    },
+    "latency_ms": {
+      "inference_latency_ms": 0.8762999786995351,
+      "test_mean_latency_ms": 351.7241379310345
+    },
+    "precision": 0.0,
+    "recall": 0.0
+  },
+  "model_type": "xgboost_binary_logistic",
+  "test_rows": 29,
+  "training_schema_version": "1.0.0"
+}

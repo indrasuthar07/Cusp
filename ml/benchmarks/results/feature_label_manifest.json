@@ -1,0 +1,18 @@
+{
+  "agent_declared_success_used": false,
+  "feature_file": "feature_vectors.jsonl",
+  "feature_schema_version": "1.1.0",
+  "feature_sha256": "4d5b44c72b1c3dc8c4fabb67ccb90ef7736323894d0b6772279cd8f7603706f6",
+  "ground_truth": [
+    "policy_verdict",
+    "action_outcome",
+    "run_outcome",
+    "verified_success"
+  ],
+  "label_file": "labels.jsonl",
+  "label_schema_version": "1.0.0",
+  "label_sha256": "327b9160bb0beca48b03ebd0f8693fa231d13886d5f10e19c7f90f49e27f5312",
+  "model": "deterministic",
+  "provider": "fake",
+  "total_rows": 91
+}

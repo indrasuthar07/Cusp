@@ -1,0 +1,20 @@
+[project]
+name = "cusp-ml"
+version = "0.1.0"
+description = "Cusp ML pipeline — dataset generation, training, and evaluation"
+requires-python = ">=3.12"
+dependencies = []  # no external deps until Task 7.6 (XGBoost)
+
+[project.scripts]
+cusp-generate-dataset = "generate_dataset:main"
+
+[tool.uv]
+package = false
+
+# Task 7.6 deps (uncomment when needed):
+# dependencies = [
+#     "xgboost>=2.1.0",
+#     "scikit-learn>=1.5.0",
+#     "numpy>=2.0.0",
+#     "pandas>=2.2.0",
+# ]

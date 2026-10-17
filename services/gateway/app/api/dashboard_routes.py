@@ -19,6 +19,7 @@ from app.db.models import (
     PolicyVersion,
     Session,
     SessionStatus,
+    ShadowRecommendation,
     UsageRecord,
 )
 from app.db.redis import get_redis_client
@@ -154,6 +155,22 @@ class ModelEvaluation(BaseModel):
 
 class ModelEvaluationResponse(BaseModel):
     models: list[ModelEvaluation]
+
+
+class ShadowRecommendationView(BaseModel):
+    recommendation_id: uuid.UUID
+    action_id: uuid.UUID
+    model_name: str
+    model_version: str
+    recommended_verdict: str
+    confidence: float
+    deterministic_verdict: str
+    applied: bool
+    created_at: datetime
+
+
+class ShadowRecommendationResponse(BaseModel):
+    recommendations: list[ShadowRecommendationView]
 
 
 class ReplayDecision(BaseModel):
@@ -604,6 +621,47 @@ async def model_evaluations(
             )
         )
     return ModelEvaluationResponse(models=models)
+
+
+@router.get("/shadow-recommendations", response_model=ShadowRecommendationResponse)
+async def shadow_recommendations(
+    limit: int = Query(default=100, ge=1, le=500),
+    user: UserIdentity = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ShadowRecommendationResponse:
+    """Return tenant-scoped learned recommendations for observation only."""
+    result = await db.execute(
+        select(ShadowRecommendation)
+        .where(ShadowRecommendation.org_id == user.org_id)
+        .order_by(ShadowRecommendation.created_at.desc())
+        .limit(limit)
+    )
+    return ShadowRecommendationResponse(
+        recommendations=[
+            ShadowRecommendationView(
+                recommendation_id=item.public_id,
+                action_id=(await _action_public_id(db, item.action_id)),
+                model_name=item.model_name,
+                model_version=item.model_version,
+                recommended_verdict=item.recommended_verdict,
+                confidence=item.confidence,
+                deterministic_verdict=item.deterministic_verdict.value,
+                applied=item.applied,
+                created_at=item.created_at,
+            )
+            for item in result.scalars().all()
+        ]
+    )
+
+
+async def _action_public_id(db: AsyncSession, action_id: int) -> uuid.UUID:
+    result = await db.execute(
+        select(ActionAttempt.public_id).where(ActionAttempt.id == action_id)
+    )
+    value = result.scalar_one_or_none()
+    if value is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return value
 
 
 @router.websocket("/live")
